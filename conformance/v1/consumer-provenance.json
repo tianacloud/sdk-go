@@ -1,0 +1,11 @@
+{
+  "distribution": "tiana.sdk-go.connect-v1.public.1",
+  "consumer_repository": "github.com/tianacloud/sdk-go",
+  "derivation": "Public CONNECT subset adapted for explicit deployment hostnames; not byte-identical to the earlier distribution. Five database profiles and quota errors aligned to the recorded Gateway revision.",
+  "source_sdk_commit": "5f459af7d74f9a1e0d689708359c0dd386032dbc",
+  "artifacts": [
+    "public-connect-authority",
+    "public-connect-protocol"
+  ],
+  "gateway_commit": "9f5aa69b24aa6e04112baaf8d1e17c0639fd293b"
+}

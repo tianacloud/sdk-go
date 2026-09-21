@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "contract_identity": "tiana.sdk-go.connect-v1.public.1",
+  "manifest_sha256": "15b2dcf733f2f909a53c3d2c7500a1e72ba5995b0bdf9497fdd90dc6187b1fbf",
+  "manifest_hash_rule": "sha256 of exact UTF-8 manifest with manifest_sha256 replaced by 64 ASCII zeroes",
+  "artifacts": {
+    "public-connect-authority": {
+      "path": "fixtures/gateway/public-connect-authority-v1.json",
+      "sha256": "16a806a44105bdc2215d61c192993988df2a1d3b60ca32cad8e8049e2c63bc42"
+    },
+    "public-connect-protocol": {
+      "path": "protocols/public-connect-v1.md",
+      "sha256": "70018308e03c4e348fced58c5f32bf58de7f336f218ff6c43fe28f0bfde3fd5c"
+    },
+    "consumer-provenance": {
+      "path": "consumer-provenance.json",
+      "sha256": "f776d2ffd3211f4840cd166cc89e697cb0674ddad5e25956ba7239a0eaec33e7"
+    }
+  }
+}
