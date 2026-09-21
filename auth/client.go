@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -32,7 +34,8 @@ var (
 )
 
 // Config controls the control-plane client. Origin must identify the MGR
-// origin; its path, if any, is preserved for local reverse proxies.
+// origin; HTTPS is required except for literal loopback IPs/localhost. Its
+// path, if any, is preserved for local reverse proxies.
 type Config struct {
 	Origin string
 	// HTTPClient supplies transport, timeout and cookie policy. The client is
@@ -63,6 +66,7 @@ type Client struct {
 	hostname       string
 	platform       string
 	nonInteractive bool
+	credentialGate chan struct{}
 }
 
 func New(origin string) (*Client, error) {
@@ -77,6 +81,9 @@ func NewWithConfig(config Config) (*Client, error) {
 	parsed, err := url.Parse(origin)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("MGR origin must be an HTTP(S) origin without credentials, query, or fragment")
+	}
+	if !secureAuthURL(parsed) {
+		return nil, errors.New("MGR origin requires HTTPS except for loopback development hosts")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	if parsed.RawPath != "" {
@@ -140,7 +147,7 @@ func NewWithConfig(config Config) (*Client, error) {
 	return &Client{
 		origin: parsed, http: config.HTTPClient, store: config.Store, output: config.Output,
 		pollInterval: config.PollInterval, now: config.Now, sleep: config.Sleep,
-		hostname: config.Hostname, platform: config.Platform, nonInteractive: config.NonInteractive,
+		hostname: config.Hostname, platform: config.Platform, nonInteractive: config.NonInteractive, credentialGate: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -252,8 +259,10 @@ type pollResponse struct {
 }
 
 type APIError struct {
-	Status            int
-	Code              string
+	Status int
+	// Code and recovery fields are peer-controlled structured metadata.
+	Code string
+	// Message is fixed HTTP status text, never the arbitrary peer message.
 	Message           string
 	RetryAfter        time.Duration
 	OperationID       string
@@ -265,11 +274,13 @@ func (e *APIError) Error() string {
 	if e == nil {
 		return "MGR request failed"
 	}
-	if e.Message != "" {
-		return fmt.Sprintf("MGR request failed (status %d): %s", e.Status, e.Message)
+	if code := diagnosticCode(e.Code); code != "" {
+		return fmt.Sprintf("MGR request failed (status %d, code %s)", e.Status, code)
 	}
 	return fmt.Sprintf("MGR request failed (status %d)", e.Status)
 }
+
+func (e APIError) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, e.Error()) }
 
 func (c *Client) CreateAuthTransaction(ctx context.Context) (AuthTransaction, error) {
 	if c == nil || c.origin == nil {
@@ -284,6 +295,9 @@ func (c *Client) CreateAuthTransaction(ctx context.Context) (AuthTransaction, er
 	}
 	if response.TransactionID == "" || response.ClientSecret == "" || response.UserCode == "" || response.VerificationURIComplete == "" || response.ExpiresIn <= 0 {
 		return AuthTransaction{}, errors.New("MGR returned an incomplete authentication transaction")
+	}
+	if !safeBrowserURL(response.VerificationURIComplete) {
+		return AuthTransaction{}, errors.New("MGR returned an unsafe verification URL")
 	}
 	interval := time.Duration(response.PollInterval) * time.Second
 	if interval <= 0 {
@@ -380,13 +394,13 @@ func (c *Client) Login(ctx context.Context) (Credential, error) {
 		if err != nil {
 			return Credential{}, err
 		}
-		if err := c.store.Save(credential); err != nil {
+		if err := c.withCredentialLock(loginContext, func(store CredentialStore) error { return store.Save(credential) }); err != nil {
 			return Credential{}, err
 		}
 		if accountCreated {
 			fmt.Fprintln(c.output, "✓ Account created")
 		}
-		fmt.Fprintf(c.output, "✓ Signed in as %s\n", userLabel(credential.User))
+		fmt.Fprintf(c.output, "✓ Signed in as %s\n", safeUserLabel(userLabel(credential.User)))
 		return credential, nil
 	}
 }
@@ -410,14 +424,31 @@ func (c *Client) exchangeAuthorizationCode(ctx context.Context, transaction Auth
 }
 
 func (c *Client) LoadCredential() (Credential, error) {
+	return c.loadCredential(context.Background())
+}
+func (c *Client) loadCredential(ctx context.Context) (Credential, error) {
 	if c == nil || c.store == nil {
 		return Credential{}, ErrCredentialNotFound
 	}
-	return c.store.Load()
+	if err := ctx.Err(); err != nil {
+		return Credential{}, err
+	}
+	// FileStore reads are already atomic, bounded and side-effect free. Do not
+	// create a directory/lock for a read of missing credentials.
+	if _, ok := c.store.(*FileStore); ok {
+		return c.store.Load()
+	}
+	var credential Credential
+	err := c.withCredentialLock(ctx, func(store CredentialStore) error {
+		var err error
+		credential, err = store.Load()
+		return err
+	})
+	return credential, err
 }
 
 func (c *Client) EnsureCredential(ctx context.Context) (Credential, error) {
-	credential, err := c.LoadCredential()
+	credential, err := c.loadCredential(ctx)
 	if errors.Is(err, ErrCredentialNotFound) {
 		return Credential{}, ErrAuthenticationRequired
 	}
@@ -434,7 +465,7 @@ func (c *Client) EnsureCredential(ctx context.Context) (Credential, error) {
 }
 
 func (c *Client) Refresh(ctx context.Context) (Credential, error) {
-	credential, err := c.LoadCredential()
+	credential, err := c.loadCredential(ctx)
 	if errors.Is(err, ErrCredentialNotFound) {
 		return Credential{}, ErrAuthenticationRequired
 	}
@@ -444,27 +475,81 @@ func (c *Client) Refresh(ctx context.Context) (Credential, error) {
 	return c.refresh(ctx, credential)
 }
 
+// withCredentialLock serializes this client's custom store or, for FileStore,
+// all cooperating processes sharing the account file. The callback uses an
+// unlocked adapter so refresh can atomically reload/rotate/persist.
+func (c *Client) withCredentialLock(ctx context.Context, fn func(CredentialStore) error) error {
+	if store, ok := c.store.(*FileStore); ok {
+		return store.withLock(ctx, fn)
+	}
+	wait, cancel := context.WithTimeout(ctx, lockWaitTimeout)
+	defer cancel()
+	if err := wait.Err(); err != nil {
+		return err
+	}
+	select {
+	case c.credentialGate <- struct{}{}:
+		defer func() { <-c.credentialGate }()
+	case <-wait.Done():
+		return wait.Err()
+	}
+	return fn(c.store)
+}
+
 func (c *Client) refresh(ctx context.Context, previous Credential) (Credential, error) {
-	var response tokenResponse
-	err := c.doJSON(ctx, http.MethodPost, "/api/v1/auth/refresh", struct {
-		RefreshToken string `json:"refresh_token"`
-	}{previous.RefreshToken}, "", &response)
-	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) && apiErr.Code == "invalid_grant" {
-			_ = c.store.Delete()
-			return Credential{}, ErrAuthenticationRequired
+	var credential Credential
+	err := c.withCredentialLock(ctx, func(store CredentialStore) error {
+		current, err := store.Load()
+		if errors.Is(err, ErrCredentialNotFound) {
+			return ErrAuthenticationRequired
 		}
-		return Credential{}, err
-	}
-	credential, err := credentialFromToken(response, c.now(), previous)
-	if err != nil {
-		return Credential{}, err
-	}
-	if err := c.store.Save(credential); err != nil {
-		return Credential{}, err
-	}
-	return credential, nil
+		if err != nil {
+			return err
+		}
+		// Another process may already have rotated the credential we loaded before
+		// waiting. Reuse that replacement instead of presenting the revoked token.
+		if !sameCredentialVersion(current, previous) && current.ExpiresAt.After(c.now().Add(accessTokenSkew)) {
+			credential = current
+			return nil
+		}
+		previous = current
+		var response tokenResponse
+		err = c.doJSON(ctx, http.MethodPost, "/api/v1/auth/refresh", struct {
+			RefreshToken string `json:"refresh_token"`
+		}{previous.RefreshToken}, "", &response)
+		if err != nil {
+			var apiErr *APIError
+			if errors.As(err, &apiErr) && apiErr.Code == "invalid_grant" {
+				// Also compare for custom stores. Their cross-client atomicity still
+				// belongs to the caller, but never deliberately delete a newer snapshot.
+				latest, loadErr := store.Load()
+				if errors.Is(loadErr, ErrCredentialNotFound) {
+					return ErrAuthenticationRequired
+				}
+				if loadErr != nil {
+					return loadErr
+				}
+				if !sameCredentialVersion(latest, previous) {
+					credential = latest
+					return nil
+				}
+				if err := store.Delete(); err != nil {
+					return err
+				}
+				return ErrAuthenticationRequired
+			}
+			return err
+		}
+		credential, err = credentialFromToken(response, c.now(), previous)
+		if err != nil {
+			return err
+		}
+		return store.Save(credential)
+	})
+	return credential, err
+}
+func sameCredentialVersion(a, b Credential) bool {
+	return a.AccessToken == b.AccessToken && a.RefreshToken == b.RefreshToken && a.ExpiresAt.Equal(b.ExpiresAt)
 }
 
 func (c *Client) Whoami(ctx context.Context) (User, error) {
@@ -497,21 +582,26 @@ func (c *Client) Whoami(ctx context.Context) (User, error) {
 }
 
 func (c *Client) Logout(ctx context.Context) error {
-	credential, err := c.LoadCredential()
-	if errors.Is(err, ErrCredentialNotFound) {
+	if c == nil || c.store == nil {
 		return nil
 	}
-	if err != nil {
-		return err
-	}
-	requestErr := c.doJSON(ctx, http.MethodPost, "/api/v1/auth/transactions/logout", struct {
-		RefreshToken string `json:"refresh_token"`
-	}{credential.RefreshToken}, "", nil)
-	deleteErr := c.store.Delete()
-	if requestErr != nil {
-		return requestErr
-	}
-	return deleteErr
+	return c.withCredentialLock(ctx, func(store CredentialStore) error {
+		credential, err := store.Load()
+		if errors.Is(err, ErrCredentialNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		requestErr := c.doJSON(ctx, http.MethodPost, "/api/v1/auth/transactions/logout", struct {
+			RefreshToken string `json:"refresh_token"`
+		}{credential.RefreshToken}, "", nil)
+		deleteErr := store.Delete()
+		if requestErr != nil {
+			return requestErr
+		}
+		return deleteErr
+	})
 }
 
 func credentialFromToken(response tokenResponse, now time.Time, previous Credential) (Credential, error) {
@@ -603,7 +693,7 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("MGR request failed: %w", err)
+		return 0, &requestError{cause: err}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -618,6 +708,14 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	}
 	return response.StatusCode, nil
 }
+
+// Transport parsers can include peer-controlled bytes in their errors. Keep
+// the cause for errors.Is/As, but do not render it in ordinary diagnostics.
+type requestError struct{ cause error }
+
+func (e *requestError) Error() string             { return "MGR request failed" }
+func (e *requestError) Unwrap() error             { return e.cause }
+func (e requestError) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "MGR request failed") }
 
 // parseAPIError accepts both the nested product/lifecycle error body and the
 // flat authentication error body. The nested form carries the operation and
@@ -648,7 +746,8 @@ func parseAPIError(response *http.Response) error {
 			}
 			if err := json.Unmarshal(body.Error, &nested); err == nil {
 				code = safeErrorCode(nested.Code)
-				message = safeErrorMessage(nested.Message)
+				// Peer messages may contain reflected credentials or terminal controls.
+				message = http.StatusText(response.StatusCode)
 				operationID = nested.OperationID
 				commandNotAfter = nested.CommandNotAfter
 				secretRecoverable = nested.SecretRecoverable
@@ -669,13 +768,57 @@ func parseAPIError(response *http.Response) error {
 	}
 }
 
-func safeErrorMessage(value string) string {
-	const limit = 2048
-	value = strings.TrimSpace(value)
-	if len(value) > limit {
-		value = value[:limit]
+// Only fixed protocol literals are safe to print. Code remains available as
+// structured metadata for forwards-compatible recovery logic.
+func diagnosticCode(code string) string {
+	switch code {
+	case "invalid_grant", "invalid_request", "unauthorized", "forbidden", "rate_limited", "COMMIT_STATUS_UNKNOWN", "INSTANCE_NOT_FOUND", "INVALID_INSTANCE_ID":
+		return code
+	default:
+		return ""
 	}
-	return value
+}
+
+func secureAuthURL(u *url.URL) bool {
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+func safeBrowserURL(value string) bool {
+	if len(value) == 0 || len(value) > 4096 {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.Host != "" && u.User == nil && secureAuthURL(u)
+}
+func safeUserLabel(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if b.Len() >= 256 {
+			b.WriteString("…")
+			break
+		}
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			b.WriteRune(' ')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func safeErrorCode(value string) string {

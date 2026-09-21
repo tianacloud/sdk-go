@@ -4,10 +4,13 @@
 
 Adapt the existing native Go CONNECT library for `github.com/tianacloud/sdk-go`.
 Keep the root package `tiana` and its transport-only scope. The separately
-authorized `auth` extraction below extends the module without changing CONNECT. The baseline
-is `5f459af7d74f9a1e0d689708359c0dd386032dbc`. Do not commit or publish without
-an explicit user request. This checkout retains private history for review;
-only a scanned source snapshot is suitable for a new public history.
+authorized `auth` extraction below extends the module without changing CONNECT.
+The original migration source baseline was
+`5f459af7d74f9a1e0d689708359c0dd386032dbc`; its separate original checkout retains
+private history. This public repository has a clean source-history root at
+`94d680c` and does not inherit that private history. Authentication security
+hardening starts from this public root on `codex/1747aaac/sdk-auth-security`.
+Do not commit, push or publish without an explicit user request.
 
 ## Endpoint identity
 
@@ -116,12 +119,11 @@ pending operations stay in CLI. No format rewrite or user credential access is
 part of validation. Follow current CLI file persistence (which supersedes the
 older specification's keychain preference), not historical spec storage defaults.
 
-Persistence retains file fsync + same-directory rename, parent chmod0700, file
-0600, no parent-directory fsync and no RMW/refresh locking across instances or
-processes. Explicitly document external serialization and possible lost updates;
-do not imply stronger durability. InstanceToken lookup is bounded 8MiB and
-Linux/macOS-only secure file opening; account reads/writes preserve existing
-behavior. Performance adds no network calls, and local lookup remains O(file).
+Persistence originally retained uncoordinated RMW and refresh; the security
+hardening decision below supersedes that behavior. JSON/file paths remain
+compatible, but built-in reads now require private owned regular files and
+writers participate in a shared persistent lock. No directory fsync guarantee
+is introduced. Performance for local reads remains O(file), bounded to 8 MiB.
 
 Validate legacy literal files, SDK-only login/refresh/logout/401 behavior,
 privacy/TLS, origin precedence/no default and constructor no-I/O, CLI unchanged
@@ -151,3 +153,48 @@ Use a value-receiver Token formatter so both values and pointers redact, includi
 values in exported struct fields, slices, arrays and maps. JSON/storage/token
 encoding is unchanged; the original input string remains caller-owned. Test all
 common fmt verbs and nil pointers. Require SDK race/vet and CLI regression checks.
+
+
+## Shared authentication security hardening
+
+Background: inherited CLI behavior allowed remote plaintext credentials,
+untrusted error-body diagnostics, unsafe account reads, and concurrent refresh
+or store RMW races that could erase rotated credentials or other origins.
+Keep CredentialStore source compatibility and existing JSON/path formats.
+
+Chosen design: require HTTPS except literal loopback IPs/localhost development;
+never resolve hostnames to create an HTTP exception. Ordinary API/transport
+error formatting contains only fixed status/allowlisted codes, while structural
+recovery fields remain available without automatic printing. Reject unsafe
+browser verification URLs and bound/control-filter login labels. This does not
+claim arbitrary resource metadata is inherently non-secret.
+
+Built-in account and InstanceToken persistence uses the existing bounded
+NOFOLLOW/NONBLOCK reader, owned regular mode-0600 files, 8 MiB cap and private
+owned mode-0700 directory. Lock a persistent adjacent .lock inode via flock;
+validate owner, type, exact mode and single hardlink, never unlink on unlock.
+Lock acquisition is cancellable and capped at 30 seconds. FileStore Save/Delete
+and token Save lock complete RMW. FileStore refresh locks reload → network
+rotation → save/delete; waiters recheck current credentials and reuse a newer
+valid version. invalid_grant never deliberately deletes a changed version.
+Logout shares this transaction; unlocked internal adapters prevent recursion.
+
+Tradeoffs: all origins in one file serialize during low-frequency refresh
+network I/O. Callers must supply network contexts/timeouts. Custom stores are
+serialized only per Client and still require caller-owned cross-client/process
+coordination. Built-in stores support Linux/macOS local flock filesystems;
+others fail closed. The same-user account/ancestor path is a trusted boundary;
+these locks cannot coordinate old binaries or hostile same-user writers.
+
+Compatibility/rollback: JSON/file names and CredentialStore methods remain;
+unsafe 0644/symlink files and remote HTTP are deliberately rejected. Persistent
+.lock sidecars remain after use. Older writers ignore them and must never run
+concurrently. Directory fsync and distributed atomic refresh are not provided;
+a crash between server rotation and local persistence can require re-login.
+Do not weaken these checks to restore unsafe legacy behavior.
+
+Verification: deterministic independent-client refresh rotation and subprocess
+refresh/write tests, cancellation, crash-released persistent inode, malformed
+HTTP and API diagnostic canaries, structural recovery fields, safe URL/labels,
+file/lock symlink/FIFO/public/hardlink/size checks, compatible legacy JSON,
+race tests, vet and Linux compilation. Use only synthetic credentials/files.

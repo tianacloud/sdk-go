@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,7 +87,7 @@ func (s *FileInstanceTokenStore) Lookup(instanceID, endpointID string, now time.
 }
 
 // FileInstanceTokenStore reads and writes the CLI-compatible token file.
-// Callers must serialize writers; Lookup requires prior MGR authorization.
+// Writers serialize across processes; Lookup requires prior MGR authorization.
 type FileInstanceTokenStore struct {
 	Path   string
 	Origin string
@@ -111,8 +112,14 @@ func (s *FileInstanceTokenStore) Save(credential InstanceTokenCredential) (strin
 	if err != nil {
 		return "", err
 	}
+	unlock, err := lockStore(context.Background(), s.Path)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	file := instanceTokenFile{Tokens: map[string]InstanceTokenCredential{}}
-	if contents, readErr := os.ReadFile(s.Path); readErr == nil {
+	if contents, readErr := readPrivateStore(s.Path); readErr == nil {
+		defer clear(contents)
 		if err := json.Unmarshal(contents, &file); err != nil {
 			return "", errors.New("InstanceToken store is invalid")
 		}

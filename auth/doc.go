@@ -21,11 +21,24 @@
 // expiry skew and newest-record selection. It neither creates tokens nor retries
 // a rejected Gateway connection. Gateway remains authoritative for revocation.
 //
-// File writes use a same-directory mode-0600 temporary file, file sync and rename
-// under a mode-0700 directory. Readers see a complete old or new file. Existing
-// stores do not lock the read-modify-write transaction or sync the directory;
-// callers must serialize credential mutations and refreshes, including across
-// clients/processes. Concurrent writers can lose updates and power-loss durability
-// is not guaranteed. Custom stores can provide stronger transactional semantics.
-// The package does not change the CLI's existing persistence guarantees.
+// File stores on Linux/macOS read owned mode-0600 regular files, refuse final
+// symlinks/FIFOs, and cap JSON at 8 MiB. Other platforms fail closed for built-in
+// stores; portable applications may supply a custom CredentialStore.
+// Writes use a same-directory mode-0600 temporary file, file sync and rename
+// under an owned mode-0700 directory. Readers see a complete old or new file.
+// Persistent adjacent .lock files serialize read-modify-write operations across
+// cooperating clients/processes. Refresh holds the account-file lock across
+// reload, server token rotation and persistence; logout uses the same lock.
+// Lock waits honor context cancellation and have a 30-second maximum. Never
+// delete lock files while clients may run. Different origins sharing one file
+// wait on the same lock; use this only on local filesystems with flock support.
+// Custom stores still require external synchronization across clients/processes.
+// Older SDK/CLI binaries do not participate in these locks and must not mutate
+// the same stores concurrently. No directory fsync or power-loss guarantee is
+// added; a crash after server rotation but before local Save may require login.
+//
+// MGR URLs require HTTPS except literal loopback IPs and localhost for local
+// development. Diagnostics omit arbitrary peer messages, transport parser text
+// and unrecognized codes. APIError retains structured recovery metadata; do not
+// log it through JSON or print unwrapped transport causes without sanitization.
 package auth
