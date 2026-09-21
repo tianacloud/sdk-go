@@ -153,3 +153,12 @@ SecretRecoverable remain programmatically available for recovery, so do not
 log APIError via JSON or print these peer-controlled fields unsanitized.
 Malformed HTTP response diagnostics are also suppressed while errors.Is/As
 can inspect the underlying transport cause. Do not directly print that cause.
+
+### Older CLI token files
+
+InstanceToken file reads also accept the RFC3339 `expires_at` strings written
+by the pre-SDK CLI. The legacy `9999-12-31T23:59:59.999Z` sentinel maps to `-1`;
+finite timestamps are rounded down to Unix seconds. Lookup leaves the file
+unchanged. The next successful Save preserves existing records and writes
+integer expirations. Do not run old string-only writers alongside this SDK.
+This compatibility applies only to local files, not management API responses.

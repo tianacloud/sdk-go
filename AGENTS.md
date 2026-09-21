@@ -198,3 +198,24 @@ refresh/write tests, cancellation, crash-released persistent inode, malformed
 HTTP and API diagnostic canaries, structural recovery fields, safe URL/labels,
 file/lock symlink/FIFO/public/hardlink/size checks, compatible legacy JSON,
 race tests, vet and Linux compilation. Use only synthetic credentials/files.
+
+## Legacy InstanceToken file expiration compatibility
+
+A pre-SDK CLI stored expires_at as RFC3339 timestamp strings, including
+9999-12-31T23:59:59.999Z for no expiry. The SDK extraction accepted only int64
+Unix seconds and incorrectly rejected those otherwise valid private files.
+Decode both forms only in the internal instanceTokenFile boundary; public
+credential types and management API wire decoding remain unchanged. Map the
+exact legacy no-expiry sentinel to -1 and floor finite timestamps to seconds
+without extending validity. Reject malformed/negative legacy times so a date
+before the epoch cannot become -1. Preserve the 30-second expiry skew and all
+origin/tenant/instance/endpoint identity and private-file checks.
+
+Lookup never writes or migrates files. A successful locked Save preserves all
+credential records and atomically writes canonical integer expirations, as the
+current SDK already does. This can normalize old string timestamps and cannot
+be read by pre-SDK string-only writers; do not mix old clients with new clients.
+No new schema or network calls. Decoding remains linear in the bounded 8 MiB
+file; no credentials or parser excerpts may appear in diagnostics. Tests must
+cover literal legacy records, finite/never/expired/skew cases, mixed-origin
+read-modify-write, failed-save preservation, and shell's real token lookup.

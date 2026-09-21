@@ -144,6 +144,47 @@ type instanceTokenFile struct {
 	Tokens map[string]InstanceTokenCredential `json:"tokens"`
 }
 
+// UnmarshalJSON accepts the timestamp format written by pre-SDK CLI versions.
+// Keep this compatibility at the file boundary; API expiry remains Unix seconds.
+func (f *instanceTokenFile) UnmarshalJSON(data []byte) error {
+	type credentialFields InstanceTokenCredential
+	var stored struct {
+		Tokens map[string]struct {
+			credentialFields
+			Expiry json.RawMessage `json:"expires_at"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return errors.New("invalid InstanceToken file")
+	}
+	tokens := make(map[string]InstanceTokenCredential, len(stored.Tokens))
+	for key, record := range stored.Tokens {
+		credential := InstanceTokenCredential(record.credentialFields)
+		var seconds int64
+		if len(record.Expiry) != 0 && json.Unmarshal(record.Expiry, &seconds) != nil {
+			var timestamp string
+			if json.Unmarshal(record.Expiry, &timestamp) != nil {
+				return errors.New("invalid InstanceToken expiry")
+			}
+			if timestamp == "9999-12-31T23:59:59.999Z" {
+				seconds = InstanceTokenNoExpiry
+			} else {
+				expiry, err := time.Parse(time.RFC3339Nano, timestamp)
+				if err != nil || expiry.Unix() < 0 {
+					return errors.New("invalid InstanceToken expiry")
+				}
+				// Round down, never extending an old token's lifetime. In particular,
+				// a pre-epoch timestamp must not become the -1 no-expiry sentinel.
+				seconds = expiry.Unix()
+			}
+		}
+		credential.ExpiresAt = seconds
+		tokens[key] = credential
+	}
+	f.Tokens = tokens
+	return nil
+}
+
 // NewInstanceTokenStore stores InstanceTokens in the private local configuration directory.
 func NewInstanceTokenStore(origin string) (InstanceTokenStore, error) {
 	origin = canonicalOriginKey(origin)
