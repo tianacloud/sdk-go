@@ -31,10 +31,10 @@ func testClient(t *testing.T, server *httptest.Server, store CredentialStore, ou
 
 func TestCurrentSessionReadsTenantIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/me" || r.Header.Get("Authorization") != "Bearer access" {
+		if r.URL.Path != "/api/v1/auth/transactions/whoami" || r.Header.Get("Authorization") != "Bearer access" {
 			t.Fatalf("request %s", r.URL.Path)
 		}
-		io.WriteString(w, `{"principal_id":"principal","tenant_id":"tenant","email":"user@example.test"}`)
+		io.WriteString(w, `{"user":{"user_id":"principal","tenant_id":"tenant","email":"user@example.test"}}`)
 	}))
 	defer server.Close()
 	store := NewFileStore(filepath.Join(t.TempDir(), "credentials.json"), server.URL)

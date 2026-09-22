@@ -172,18 +172,14 @@ type User struct {
 // CurrentSession returns the authenticated principal and tenant identity used
 // to scope local credential candidates.
 func (c *Client) CurrentSession(ctx context.Context) (User, error) {
-	var response struct {
-		PrincipalID string `json:"principal_id"`
-		TenantID    string `json:"tenant_id"`
-		Email       string `json:"email"`
-	}
-	if _, err := c.DoJSON(ctx, http.MethodGet, "/api/v1/me", nil, nil, &response); err != nil {
+	user, err := c.Whoami(ctx)
+	if err != nil {
 		return User{}, err
 	}
-	if response.PrincipalID == "" || response.TenantID == "" {
+	if user.ID == "" || user.TenantID == "" {
 		return User{}, errors.New("current session identity is incomplete")
 	}
-	return User{ID: response.PrincipalID, TenantID: response.TenantID, Email: response.Email}, nil
+	return user, nil
 }
 
 type Credential struct {

@@ -12,7 +12,7 @@ import (
 )
 
 func legacyTokenFixture(expiry string) []byte {
-	return []byte(fmt.Sprintf(`{"tokens":{"https://mgr.example|tenant|instance|old":{"origin":"https://mgr.example","tenant_id":"tenant","instance_id":"instance","endpoint_id":"endpoint","token_id":"old","token":"synthetic-old-token","expires_at":%s,"saved_at":"2026-01-01T00:00:00Z"}}}`, expiry))
+	return []byte(fmt.Sprintf(`{"tokens":{"https://mgr.example|tenant|old":{"origin":"https://mgr.example","tenant_id":"tenant","instance_id":"instance","endpoint_id":"endpoint","token_id":"old","token":"synthetic-old-token","expires_at":%s,"saved_at":"2026-01-01T00:00:00Z"}}}`, expiry))
 }
 
 func TestLegacyInstanceTokenExpiryLookup(t *testing.T) {
@@ -37,7 +37,7 @@ func TestLegacyInstanceTokenExpiryLookup(t *testing.T) {
 				t.Fatal(err)
 			}
 			s := NewFileInstanceTokenStore(path, "https://mgr.example")
-			got, err := s.Lookup("instance", "endpoint", now)
+			got, err := s.LookupCandidates("tenant", []string{"old"}, now)
 			if tc.usable {
 				if err != nil || got.ExpiresAt != tc.want || got.Token != "synthetic-old-token" {
 					t.Fatalf("legacy lookup failed: %v", err)
@@ -63,11 +63,11 @@ func TestSavePreservesLegacyInstanceTokens(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := NewFileInstanceTokenStore(path, "https://mgr.example")
-	got, err := old.Lookup("instance", "endpoint", time.Now())
+	got, err := old.LookupCandidates("tenant", []string{"old"}, time.Now())
 	if err != nil || got.Token != "synthetic-old-token" || got.ExpiresAt != -1 {
 		t.Fatalf("old token lost: %v", err)
 	}
-	got, err = s.Lookup("other", "endpoint", time.Now())
+	got, err = s.LookupCandidates("tenant", []string{"new"}, time.Now())
 	if err != nil || got.Token != "synthetic-new-token" {
 		t.Fatalf("new token missing: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestMalformedLegacyExpiryDoesNotOverwriteStore(t *testing.T) {
 				t.Fatal(err)
 			}
 			s := NewFileInstanceTokenStore(path, "https://mgr.example")
-			if _, err := s.Lookup("instance", "endpoint", time.Now()); err == nil {
+			if _, err := s.LookupCandidates("tenant", []string{"old"}, time.Now()); err == nil {
 				t.Fatal("accepted malformed/unsafe expiry")
 			}
 			if _, err := s.Save(InstanceTokenCredential{TenantID: "tenant", InstanceID: "other", TokenID: "new", Token: "synthetic", ExpiresAt: -1}); err == nil {

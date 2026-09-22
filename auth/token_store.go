@@ -16,7 +16,7 @@ import (
 const instanceTokensFileName = "instance-tokens.json"
 
 // InstanceTokenCredential is one delivered InstanceToken. It is keyed by MGR
-// origin, Tenant, instance, and Token so a new Token never overwrites another
+// origin, Tenant, and Token so a new Token never overwrites another
 // Token's credential.
 type InstanceTokenCredential struct {
 	Origin     string    `json:"origin"`
