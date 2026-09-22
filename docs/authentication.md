@@ -66,7 +66,7 @@ JSON keys, field names, timestamps and Unix-second token expiry (`-1` means
 unlimited) remain unchanged. Existing users need no login or file migration.
 
 Account records remain keyed by MGR origin; InstanceTokens remain keyed by
-origin, tenant, instance and token ID. Origin key normalization removes only
+origin, tenant and token ID. Origin key normalization removes only
 surrounding whitespace and trailing slashes, preserving legacy lookup behavior.
 
 After resolving an instance through the current authenticated MGR account:

@@ -92,7 +92,7 @@ optionally changes only the physical TCP target.
 TLS verification remains enabled, with TLS 1.3 and ALPN `h2` required.
 
 Omit `Token` for an Endpoint whose policy permits anonymous access. Supplied
-tokens must be canonical `tia_` InstanceTokens. A token belongs to its Client;
+tokens are opaque credential strings. A token belongs to its Client;
 different credentials or trust roots use separate Clients. Formatting Token,
 Config, Client and Tunnel values redacts their contents, including copied Token
 values and tokens in formatted containers. The root CONNECT package emits no logs.
