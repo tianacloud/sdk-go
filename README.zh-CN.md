@@ -87,7 +87,7 @@ SDK 会规范化 DNS 大小写，拒绝裸 Endpoint ID、URL 和带端口后缀�
 TLS 证书校验保持启用，要求 TLS 1.3 和 ALPN `h2`。
 
 仅当 Endpoint 策略允许匿名访问时，才可省略 `Token`。
-提供的令牌必须是规范的 `tia_` InstanceToken。令牌属于其 Client；
+提供的令牌按不透明凭据字符串透传。令牌属于其 Client；
 不同凭据或信任根应使用不同的 Client。格式化 Token、Config、Client 和 Tunnel
 时会脱敏，包括复制后的 Token 值和容器中的 Token。根包 CONNECT 不输出日志。
 
