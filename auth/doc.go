@@ -15,11 +15,11 @@
 // authorization-code exchange flow. RunAuthenticated may log in unless NonInteractive is set;
 // EnsureCredential and DoJSON only load/refresh existing credentials.
 //
-// InstanceToken lookup must follow successful MGR authorization of the target
-// instance for the active account. Local credentials are capabilities, not an
-// authorization proof. Lookup preserves origin/tenant/instance/endpoint scoping,
-// expiry skew and newest-record selection. It neither creates tokens nor retries
-// a rejected Gateway connection. Gateway remains authoritative for revocation.
+// InstanceToken selection must follow successful MGR authorization of the target
+// for the active account. Local credentials are capabilities, not authorization
+// proof. Candidate selection preserves origin/tenant scoping, expiry skew and
+// newest-record selection, and never falls back outside IDs returned by MGR.
+// It neither creates tokens nor retries a rejected Gateway connection.
 //
 // File writes use a same-directory mode-0600 temporary file, file sync and rename
 // under a mode-0700 directory. Readers see a complete old or new file. Existing

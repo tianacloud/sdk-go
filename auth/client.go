@@ -155,10 +155,28 @@ func (c *Client) Origin() string {
 // for identities that do not expose one.
 type User struct {
 	ID          string `json:"user_id"`
+	TenantID    string `json:"tenant_id,omitempty"`
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 	Username    string `json:"username,omitempty"`
 	AvatarURL   string `json:"avatar_url,omitempty"`
+}
+
+// CurrentSession returns the authenticated principal and tenant identity used
+// to scope local credential candidates.
+func (c *Client) CurrentSession(ctx context.Context) (User, error) {
+	var response struct {
+		PrincipalID string `json:"principal_id"`
+		TenantID    string `json:"tenant_id"`
+		Email       string `json:"email"`
+	}
+	if _, err := c.DoJSON(ctx, http.MethodGet, "/api/v1/me", nil, nil, &response); err != nil {
+		return User{}, err
+	}
+	if response.PrincipalID == "" || response.TenantID == "" {
+		return User{}, errors.New("current session identity is incomplete")
+	}
+	return User{ID: response.PrincipalID, TenantID: response.TenantID, Email: response.Email}, nil
 }
 
 type Credential struct {

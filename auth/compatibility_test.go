@@ -16,16 +16,16 @@ import (
 	"github.com/tianacloud/sdk-go/auth"
 )
 
-func TestExistingCLICredentialFiles(t *testing.T) {
+func TestCurrentCLICredentialFiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)
 	dir := filepath.Join(root, "tiana")
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	// Literal legacy on-disk shapes; tokens below are synthetic test inputs.
+	// Literal current on-disk shapes; tokens below are synthetic test inputs.
 	account := `{"credentials":{"https://mgr.example.test":{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expires_at":"2099-01-01T00:00:00Z","user":{"user_id":"user-one"}}}}`
-	tokens := `{"tokens":{"https://mgr.example.test|tenant-one|instance-one|token-one":{"origin":"https://mgr.example.test","tenant_id":"tenant-one","instance_id":"instance-one","endpoint_id":"endpoint-one","token_id":"token-one","token":"synthetic-instance-token","expires_at":-1,"saved_at":"2026-01-01T00:00:00Z"}}}`
+	tokens := `{"tokens":{"https://mgr.example.test|tenant-one|token-one":{"origin":"https://mgr.example.test","tenant_id":"tenant-one","instance_id":"instance-one","endpoint_id":"endpoint-one","token_id":"token-one","token":"synthetic-instance-token","expires_at":-1,"saved_at":"2026-01-01T00:00:00Z"}}}`
 	for name, body := range map[string]string{"credentials.json": account, "instance-tokens.json": tokens} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
@@ -43,7 +43,7 @@ func TestExistingCLICredentialFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, err := store.Lookup("instance-one", "endpoint-one", time.Now())
+	token, err := store.LookupCandidates("tenant-one", []string{"token-one"}, time.Now())
 	if err != nil || token.Token != "synthetic-instance-token" {
 		t.Fatalf("legacy token load: %v", err)
 	}

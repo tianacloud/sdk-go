@@ -164,6 +164,32 @@ func echoServer(t *testing.T) *testListener {
 	})
 }
 
+func TestOpaqueTokenReachesGatewayUnchanged(t *testing.T) {
+	const secret = "opaque-group-secret-with-arbitrary-prefix-and-length"
+	received := make(chan string, 1)
+	server := listenTest(t, testTLS(t, "endpoint"), func(conn *tls.Conn) {
+		(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			received <- r.Header.Get("Proxy-Authorization")
+			echoHandler(w, r)
+		})})
+	})
+	token, err := NewToken(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := clientFor(t, server, func(config *Config) { config.Token = token })
+	tunnel := connectFor(t, client, context.Background())
+	defer tunnel.Close()
+	select {
+	case got := <-received:
+		if got != "Bearer "+secret {
+			t.Fatalf("credential changed: %q", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Gateway did not receive credential")
+	}
+}
+
 func readExact(t *testing.T, r io.Reader, want string) {
 	t.Helper()
 	buf := make([]byte, len(want))

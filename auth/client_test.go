@@ -29,6 +29,24 @@ func testClient(t *testing.T, server *httptest.Server, store CredentialStore, ou
 	return client
 }
 
+func TestCurrentSessionReadsTenantIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/me" || r.Header.Get("Authorization") != "Bearer access" {
+			t.Fatalf("request %s", r.URL.Path)
+		}
+		io.WriteString(w, `{"principal_id":"principal","tenant_id":"tenant","email":"user@example.test"}`)
+	}))
+	defer server.Close()
+	store := NewFileStore(filepath.Join(t.TempDir(), "credentials.json"), server.URL)
+	if err := store.Save(Credential{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := testClient(t, server, store, new(bytes.Buffer)).CurrentSession(context.Background())
+	if err != nil || got.ID != "principal" || got.TenantID != "tenant" {
+		t.Fatalf("session=%+v err=%v", got, err)
+	}
+}
+
 func TestLoginHTTPFlowStoresCredentialAndKeepsSecretsOutOfOutput(t *testing.T) {
 	const clientSecret = "ats_client_secret_should_not_be_printed"
 	const authorizationCode = "ac_authorization_code_should_not_be_printed"

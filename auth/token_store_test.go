@@ -71,3 +71,27 @@ func TestFileInstanceTokenStoreRejectsIncompleteCredential(t *testing.T) {
 		t.Fatal("expected a missing secret to be rejected")
 	}
 }
+
+func TestFileInstanceTokenStoreStoresOneSecretAcrossResourceMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "instance-tokens.json")
+	store := NewFileInstanceTokenStore(path, "https://one.example")
+	credential := InstanceTokenCredential{TenantID: "tenant", TokenID: "token", Token: "opaque", InstanceID: "first", ExpiresAt: InstanceTokenNoExpiry}
+	if _, err := store.Save(credential); err != nil {
+		t.Fatal(err)
+	}
+	credential.InstanceID = "second"
+	if _, err := store.Save(credential); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file instanceTokenFile
+	if err := json.Unmarshal(contents, &file); err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Tokens) != 1 {
+		t.Fatalf("stored %d copies of one secret", len(file.Tokens))
+	}
+}

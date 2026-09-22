@@ -71,7 +71,7 @@ func TestDefaultStoresPersistLocally(t *testing.T) {
 			if err := json.Unmarshal(contents, &savedTokens); err != nil {
 				t.Fatal(err)
 			}
-			if savedTokens.Tokens[origin+"|tenant|instance|token"].Token != "secret" {
+			if savedTokens.Tokens[origin+"|tenant|token"].Token != "secret" {
 				t.Fatal("instance token was not saved locally")
 			}
 			if err := reopened.Delete(); err != nil {

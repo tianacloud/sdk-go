@@ -94,10 +94,15 @@ func TestEndpointAndTokenInput(t *testing.T) {
 			t.Fatalf("deployment endpoint = %q, %v", host, err)
 		}
 	}
-	valid := syntheticToken(t).value
-	for _, input := range []string{valid + "=", valid[:46] + "9", "tia_bad", valid + "\r\n"} {
+	for _, input := range []string{"x", "group-secret-with-arbitrary-prefix-and-length", strings.Repeat("z", 257)} {
+		token, err := NewToken(input)
+		if err != nil || token.value != input {
+			t.Fatalf("opaque token %q changed or rejected: %v", input, err)
+		}
+	}
+	for _, input := range []string{"", "line\nbreak", "line\rbreak"} {
 		if _, err := NewToken(input); err == nil {
-			t.Fatal("accepted invalid token")
+			t.Fatalf("accepted token outside HTTP header boundary %q", input)
 		}
 	}
 }

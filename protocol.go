@@ -2,11 +2,12 @@
 package tiana
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"regexp"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 const Version = "0.1.0-dev.1"
@@ -43,19 +44,14 @@ func ParseEndpoint(value string) (string, error) {
 	return value, nil
 }
 
-// Token holds a canonical InstanceToken. Formatting never reveals its value.
+// Token holds an opaque InstanceToken. Formatting never reveals its value.
 // The caller remains responsible for the lifetime of the original input.
 type Token struct{ value string }
 
 func NewToken(value string) (*Token, error) {
-	if len(value) != 47 || !strings.HasPrefix(value, "tia_") {
+	if value == "" || !httpguts.ValidHeaderFieldValue(value) {
 		return nil, failure(Configuration, "invalid InstanceToken", false)
 	}
-	decoded, err := base64.RawURLEncoding.Strict().DecodeString(value[4:])
-	if err != nil || len(decoded) != 32 {
-		return nil, failure(Configuration, "invalid InstanceToken", false)
-	}
-	clear(decoded)
 	return &Token{value: value}, nil
 }
 
