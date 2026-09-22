@@ -105,11 +105,60 @@ directory is chmod'ed to 0700 even if it already exists: custom file paths must
 use a dedicated private directory. Pending command recovery remains a CLI
 concern and its separate path/format are not changed.
 
-This extraction does not introduce a store lock or a cross-process refresh
-coordinator. Serialize mutations/refreshes across clients and processes sharing
-a store. Concurrent read-modify-write operations can overwrite updates; rotated
-refresh credentials must not be raced. The parent directory is not fsync'ed,
-so full power-loss durability is not promised. Readers during rename see a
-complete old/new file. A custom CredentialStore may provide stronger persistence;
-applications own that store's lifecycle. Go-managed strings are not guaranteed
+Built-in stores now serialize cooperating writers across clients and processes
+using a persistent adjacent `.lock` file (mode 0600, regular, owned by the
+current user; symlinks, hardlinks and FIFOs are rejected). Never delete these
+lock files while a client might be running: the persistent inode prevents
+split-lock races. An exited process releases its advisory lock automatically.
+Account and InstanceToken reads and writes require owned mode-0600 regular
+files with no final symlink and at most 8 MiB of JSON. Unsafe existing files are
+rejected without reading or silently repairing them. Linux and macOS are
+supported; other platforms fail closed for built-in stores.
+
+Refresh holds the account-file lock while reloading the latest credential,
+rotating it at MGR and saving the replacement. A waiter reuses an already
+rotated credential instead of resubmitting an old refresh token. `invalid_grant`
+deletion compares the current credential with the attempted version. Logout
+uses the same lock. Lock acquisition honors the calling context and always
+has a 30-second maximum; standalone Save/Delete use that same maximum.
+Network calls still require an application context/HTTP timeout. Other origins
+sharing the same credentials file briefly wait on this lock; account refresh
+is a low-frequency path. Use local filesystems with working advisory flock.
+
+Custom CredentialStore implementations retain their existing interface. Calls
+through one Client serialize refresh/login persistence/logout, but applications
+must coordinate custom stores across clients and processes themselves. Older
+SDK/CLI binaries do not participate in the file locks: do not run older writers
+concurrently against the same files. File names and JSON formats are unchanged.
+
+The parent directory is not fsync'ed, so full power-loss durability is not
+promised. A crash after server token rotation but before saving the replacement
+can require a fresh login. Readers during rename see a complete old/new file.
+Applications own their store lifecycle. Go-managed strings are not guaranteed
 to be zeroized.
+
+## Authentication network and diagnostic boundaries
+
+MGR origins require HTTPS. Only literal loopback IP addresses and `localhost`
+may use HTTP for local development; there is no DNS lookup-based exception.
+Remote plaintext origins now fail at construction, even with InsecureTLS.
+Browser verification links must use HTTPS or the same local-development rule,
+have a host, contain no userinfo/terminal controls, and fit within 4096 bytes.
+Login identity labels are bounded and remove terminal control characters.
+
+APIError.Error and ordinary fmt diagnostics use only status and a small fixed
+set of known protocol codes. Arbitrary peer messages are discarded; Message
+contains fixed HTTP status text. Code, OperationID, CommandNotAfter and
+SecretRecoverable remain programmatically available for recovery, so do not
+log APIError via JSON or print these peer-controlled fields unsanitized.
+Malformed HTTP response diagnostics are also suppressed while errors.Is/As
+can inspect the underlying transport cause. Do not directly print that cause.
+
+### Older CLI token files
+
+InstanceToken file reads also accept the RFC3339 `expires_at` strings written
+by the pre-SDK CLI. The legacy `9999-12-31T23:59:59.999Z` sentinel maps to `-1`;
+finite timestamps are rounded down to Unix seconds. Lookup leaves the file
+unchanged. The next successful Save preserves existing records and writes
+integer expirations. Do not run old string-only writers alongside this SDK.
+This compatibility applies only to local files, not management API responses.

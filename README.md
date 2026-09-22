@@ -17,6 +17,10 @@ environment variables; no deployment origin is built into the SDK.
 The root CONNECT client does not implicitly read these files or initiate login.
 See the package guide for usage, authorization boundaries and store concurrency.
 
+MGR requires HTTPS except loopback development. Linux/macOS file stores reject
+unsafe files and coordinate refresh/writes across processes with persistent
+locks; custom stores require caller-owned cross-client coordination.
+
 MGR requests never follow HTTP redirects, including same-origin redirects and
 caller-provided redirect policies. Configure the final MGR origin directly;
 a 3xx response is returned as an APIError with its original status. Account

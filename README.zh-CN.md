@@ -16,6 +16,9 @@ Tiana v1 CONNECT 的原生 Go 传输库，模块路径为
 根包的 CONNECT 客户端不会隐式读取这些文件或发起登录。
 具体用法、授权边界和存储并发约束见鉴权指南。
 
+MGR 除本机回环开发地址外必须使用 HTTPS。Linux/macOS 文件存储会拒绝不安全的
+凭据文件，并通过持久锁协调跨进程刷新与写入；自定义存储仍需调用方协调多个客户端。
+
 MGR 请求不会自动跟随 HTTP 重定向，包括同源重定向和调用方提供的重定向策略。
 请直接配置最终的 MGR 地址；3xx 响应会以保留原始状态码的 APIError 返回。
 账户 access token、refresh token 与 CONNECT 使用的 InstanceToken 是不同的凭据。
