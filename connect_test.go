@@ -48,9 +48,25 @@ func testTLS(t *testing.T, name string) *tls.Config {
 	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13, NextProtos: []string{"h2"}}
 }
 
+func TestConnectFailureBeforeSessionRetainsRequestID(t *testing.T) {
+	var observed string
+	client, err := NewClient(Config{Endpoint: testEndpoint + testEndpointSuffix, DialAddress: "127.0.0.1:1", Token: syntheticToken(t), OnRequestID: func(id string) { observed = id; panic("diagnostic consumer failure") }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = client.Connect(ctx, HranaHTTP)
+	var diagnostic *Error
+	if !errors.As(err, &diagnostic) || diagnostic.RequestID == "" || diagnostic.RequestID != observed || !strings.HasPrefix(diagnostic.RequestID, "req-") {
+		t.Fatalf("connect error has no pre-network request ID: %v", err)
+	}
+}
+
 func syntheticToken(t *testing.T) *Token {
 	t.Helper()
-	token, err := NewToken("tia_" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+	token, err := NewToken("tia_0" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,5 +603,47 @@ func TestUnknownProfilesRejectedBeforeDial(t *testing.T) {
 	}
 	if server.count.Load() != 0 {
 		t.Fatal("unsupported profile dialed a server")
+	}
+}
+
+func TestRequestIdentityCallbackPrecedesGatewayAndMatchesConcurrentTunnels(t *testing.T) {
+	var observed sync.Map
+	var count atomic.Int32
+	server := listenTest(t, testTLS(t, "endpoint"), func(conn *tls.Conn) {
+		(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id := r.Header.Get("tiana-request-id")
+			if _, exists := observed.Load(id); !exists {
+				t.Error("Gateway received an ID before its diagnostic callback")
+			}
+			echoHandler(w, r)
+		})})
+	})
+	client := clientFor(t, server, func(cfg *Config) {
+		cfg.OnRequestID = func(id string) {
+			if _, duplicate := observed.LoadOrStore(id, true); duplicate {
+				t.Error("connection ID reused")
+			}
+			count.Add(1)
+		}
+	})
+	var done sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			tunnel, err := client.Connect(context.Background(), HranaHTTP)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer tunnel.Close()
+			if _, ok := observed.Load(tunnel.Metadata().RequestID); !ok {
+				t.Error("tunnel metadata lost diagnostic ID")
+			}
+		}()
+	}
+	done.Wait()
+	if count.Load() != 8 {
+		t.Fatalf("diagnostic calls = %d", count.Load())
 	}
 }

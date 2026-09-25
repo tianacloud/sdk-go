@@ -65,7 +65,13 @@ func TestCurrentCLICredentialFiles(t *testing.T) {
 
 func TestAuthorizedRequestRefreshAndNoServerErrorReplay(t *testing.T) {
 	var calls, refreshes int
+	requestIDs := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := r.Header.Get("X-Request-ID"); !strings.HasPrefix(id, "req-") || requestIDs[id] {
+			t.Errorf("missing or reused request ID: %q", id)
+		} else {
+			requestIDs[id] = true
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/v1/auth/refresh" {
 			refreshes++
@@ -94,7 +100,7 @@ func TestAuthorizedRequestRefreshAndNoServerErrorReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, err := client.DoJSON(context.Background(), http.MethodPost, "/operation", map[string]string{"value": "same"}, map[string]string{"Idempotency-Key": "stable-key"}, nil)
-	if status != 503 || err == nil || calls != 2 || refreshes != 1 {
+	if status != 503 || err == nil || calls != 2 || refreshes != 1 || auth.RequestIDOf(err) == "" || !requestIDs[auth.RequestIDOf(err)] {
 		t.Fatalf("status=%d calls=%d refreshes=%d err=%v", status, calls, refreshes, err)
 	}
 }

@@ -52,7 +52,7 @@ func TestGatewaySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrong, _ := tiana.NewToken("tia_" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+	wrong, _ := tiana.NewToken("tia_0" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 	cases := []struct {
 		name, address string
 		token         *tiana.Token

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +27,9 @@ type Config struct {
 	ConnectTimeout  time.Duration
 	ResponseTimeout time.Duration
 	MaxStreams      int
+	// OnRequestID receives the connection identity before network I/O.
+	// Calls may be concurrent; keep the callback brief. Panics are ignored.
+	OnRequestID func(string)
 }
 
 func (Config) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, "tiana.Config([REDACTED])") }
@@ -112,15 +116,27 @@ func (c *Client) Connect(ctx context.Context, profile Profile) (*Tunnel, error) 
 	if err := ctx.Err(); err != nil {
 		return nil, contextFailure(err, false)
 	}
-	s, err := c.getSession(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var random [18]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return nil, failure(Configuration, "request ID generation failed", false)
 	}
 	requestID := "req-" + base64.RawURLEncoding.EncodeToString(random[:])
+	if c.cfg.OnRequestID != nil {
+		func() {
+			defer func() { _ = recover() }()
+			c.cfg.OnRequestID(requestID)
+		}()
+	}
+	s, err := c.getSession(ctx)
+	if err != nil {
+		var connectionError *Error
+		if errors.As(err, &connectionError) {
+			copy := *connectionError
+			copy.RequestID = requestID
+			return nil, &copy
+		}
+		return nil, err
+	}
 	t, err := s.startTunnel(ctx, profile, requestID)
 	if err != nil {
 		return nil, err

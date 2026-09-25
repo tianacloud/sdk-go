@@ -17,6 +17,19 @@ environment variables; no deployment origin is built into the SDK.
 The root CONNECT client does not implicitly read these files or initiate login.
 See the package guide for usage, authorization boundaries and store concurrency.
 
+`Config.OnRequestID` receives each CONNECT identity before network I/O, including
+failed handshakes. Callbacks may run concurrently; keep them brief. Callback
+panics do not change the connection result. The same identity is available in
+tunnel metadata and connection errors.
+
+`auth.Config.OnRequestID` receives the generated request ID before each MGR
+network attempt, including successful requests. Keep this diagnostic callback
+brief; a callback panic is contained. `auth.RequestIDOf(err)` retrieves the
+identity associated with a request error without exposing credentials or response
+bodies. A polling response that reports denied, expired or completed authorization
+also retains its request ID; `errors.Is` still recognizes the corresponding
+authentication transaction error.
+
 MGR requires HTTPS except loopback development. Linux/macOS file stores reject
 unsafe files and coordinate refresh/writes across processes with persistent
 locks; custom stores require caller-owned cross-client coordination.

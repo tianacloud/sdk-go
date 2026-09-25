@@ -3,8 +3,10 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,6 +55,8 @@ type Config struct {
 	// disabled by default and must be explicitly selected by the caller.
 	InsecureTLS bool
 	RootCAs     *x509.CertPool
+	// OnRequestID receives each request identity before network I/O. Keep the callback brief.
+	OnRequestID func(string)
 }
 
 type Client struct {
@@ -67,6 +71,7 @@ type Client struct {
 	platform       string
 	nonInteractive bool
 	credentialGate chan struct{}
+	onRequestID    func(string)
 }
 
 func New(origin string) (*Client, error) {
@@ -146,6 +151,7 @@ func NewWithConfig(config Config) (*Client, error) {
 	}
 	return &Client{
 		origin: parsed, http: config.HTTPClient, store: config.Store, output: config.Output,
+		onRequestID:  config.OnRequestID,
 		pollInterval: config.PollInterval, now: config.Now, sleep: config.Sleep,
 		hostname: config.Hostname, platform: config.Platform, nonInteractive: config.NonInteractive, credentialGate: make(chan struct{}, 1),
 	}, nil
@@ -266,6 +272,7 @@ type PollResult struct {
 }
 
 type pollResponse struct {
+	requestID         string
 	Status            string `json:"status"`
 	RetryAfter        int    `json:"retry_after"`
 	AuthorizationCode string `json:"authorization_code"`
@@ -273,7 +280,8 @@ type pollResponse struct {
 }
 
 type APIError struct {
-	Status int
+	Status    int
+	RequestID string
 	// Code and recovery fields are peer-controlled structured metadata.
 	Code string
 	// Message is fixed HTTP status text, never the arbitrary peer message.
@@ -337,9 +345,12 @@ func (c *Client) PollAuthTransaction(ctx context.Context, transaction AuthTransa
 	if err != nil {
 		return PollResult{}, err
 	}
+	failure := func(cause error) error {
+		return &requestError{cause: cause, RequestID: response.requestID, message: cause.Error()}
+	}
 	status := strings.ToLower(strings.TrimSpace(response.Status))
 	if status == "" {
-		return PollResult{}, errors.New("MGR returned an empty authentication transaction status")
+		return PollResult{}, failure(errors.New("MGR returned an empty authentication transaction status"))
 	}
 	result := PollResult{Status: status, RetryAfter: time.Duration(response.RetryAfter) * time.Second, AuthorizationCode: response.AuthorizationCode, AuthorizationExpires: response.ExpiresIn}
 	switch status {
@@ -347,17 +358,17 @@ func (c *Client) PollAuthTransaction(ctx context.Context, transaction AuthTransa
 		return result, nil
 	case "approved":
 		if result.AuthorizationCode == "" {
-			return PollResult{}, errors.New("MGR approved authentication without an authorization code")
+			return PollResult{}, failure(errors.New("MGR approved authentication without an authorization code"))
 		}
 		return result, nil
 	case "expired":
-		return result, ErrTransactionExpired
+		return result, failure(ErrTransactionExpired)
 	case "denied":
-		return result, ErrTransactionDenied
+		return result, failure(ErrTransactionDenied)
 	case "completed":
-		return result, ErrTransactionCompleted
+		return result, failure(ErrTransactionCompleted)
 	default:
-		return PollResult{}, errors.New("MGR returned an unknown authentication transaction status")
+		return PollResult{}, failure(errors.New("MGR returned an unknown authentication transaction status"))
 	}
 }
 
@@ -694,6 +705,11 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	if err != nil {
 		return 0, errors.New("create MGR request")
 	}
+	var requestIdentity [18]byte
+	if _, err := rand.Read(requestIdentity[:]); err != nil {
+		return 0, errors.New("generate MGR request ID")
+	}
+	requestID := "req-" + base64.RawURLEncoding.EncodeToString(requestIdentity[:])
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Cache-Control", "no-store")
 	if payload != nil {
@@ -705,31 +721,65 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
+	request.Header.Set("X-Request-ID", requestID)
+	if c.onRequestID != nil {
+		func() {
+			defer func() { _ = recover() }()
+			c.onRequestID(requestID)
+		}()
+	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return 0, &requestError{cause: err}
+		return 0, &requestError{cause: err, RequestID: requestID}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return response.StatusCode, parseAPIError(response)
+		apiError := parseAPIError(response).(*APIError)
+		apiError.RequestID = requestID
+		return response.StatusCode, apiError
 	}
 	if result == nil || response.StatusCode == http.StatusNoContent {
 		return response.StatusCode, nil
 	}
+	if poll, ok := result.(*pollResponse); ok {
+		poll.requestID = requestID
+	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes))
 	if err := decoder.Decode(result); err != nil {
-		return response.StatusCode, errors.New("MGR returned invalid JSON")
+		return response.StatusCode, &requestError{cause: errors.New("MGR returned invalid JSON"), RequestID: requestID, message: "MGR returned invalid JSON"}
 	}
 	return response.StatusCode, nil
 }
 
 // Transport parsers can include peer-controlled bytes in their errors. Keep
 // the cause for errors.Is/As, but do not render it in ordinary diagnostics.
-type requestError struct{ cause error }
+type requestError struct {
+	cause     error
+	RequestID string
+	message   string
+}
 
-func (e *requestError) Error() string             { return "MGR request failed" }
+func (e *requestError) Error() string {
+	if e.message != "" {
+		return e.message
+	}
+	return "MGR request failed"
+}
 func (e *requestError) Unwrap() error             { return e.cause }
-func (e requestError) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "MGR request failed") }
+func (e requestError) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, e.Error()) }
+
+// RequestIDOf returns the MGR request identity associated with an error.
+func RequestIDOf(err error) string {
+	var apiError *APIError
+	if errors.As(err, &apiError) {
+		return apiError.RequestID
+	}
+	var transportError *requestError
+	if errors.As(err, &transportError) {
+		return transportError.RequestID
+	}
+	return ""
+}
 
 // parseAPIError accepts both the nested product/lifecycle error body and the
 // flat authentication error body. The nested form carries the operation and
