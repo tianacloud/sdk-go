@@ -22,6 +22,10 @@ failed handshakes. Callbacks may run concurrently; keep them brief. Callback
 panics do not change the connection result. The same identity is available in
 tunnel metadata and connection errors.
 
+`auth.WithRequestID(ctx, id)` carries an existing logical request identity into
+MGR calls, including their diagnostic callbacks and errors. Use a separate
+context for each concurrent request. Calls without an inherited ID generate one.
+
 `auth.Config.OnRequestID` receives the generated request ID before each MGR
 network attempt, including successful requests. Keep this diagnostic callback
 brief; a callback panic is contained. `auth.RequestIDOf(err)` retrieves the

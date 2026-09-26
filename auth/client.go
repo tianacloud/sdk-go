@@ -705,11 +705,14 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	if err != nil {
 		return 0, errors.New("create MGR request")
 	}
-	var requestIdentity [18]byte
-	if _, err := rand.Read(requestIdentity[:]); err != nil {
-		return 0, errors.New("generate MGR request ID")
+	requestID, _ := ctx.Value(requestIdentityKey{}).(string)
+	if requestID == "" {
+		var requestIdentity [18]byte
+		if _, err := rand.Read(requestIdentity[:]); err != nil {
+			return 0, errors.New("generate MGR request ID")
+		}
+		requestID = "req-" + base64.RawURLEncoding.EncodeToString(requestIdentity[:])
 	}
-	requestID := "req-" + base64.RawURLEncoding.EncodeToString(requestIdentity[:])
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Cache-Control", "no-store")
 	if payload != nil {

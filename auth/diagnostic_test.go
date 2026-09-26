@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -59,4 +61,31 @@ func TestPollTerminalErrorsKeepRequestIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInheritedRequestIdentityIsIsolatedPerContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Request-ID") != strings.TrimPrefix(r.URL.Path, "/") {
+			t.Errorf("identity leaked: path=%s id=%s", r.URL.Path, r.Header.Get("X-Request-ID"))
+		}
+		w.WriteHeader(503)
+		fmt.Fprint(w, `{"error":"unavailable"}`)
+	}))
+	defer server.Close()
+	origin, _ := url.Parse(server.URL)
+	client := &Client{origin: origin, http: server.Client()}
+	var group sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			id := fmt.Sprintf("req-preview-%d", i)
+			ctx := WithRequestID(context.Background(), id)
+			_, err := client.doJSONWithHeadersStatus(ctx, "GET", "/"+id, nil, "", nil, nil)
+			if RequestIDOf(err) != id {
+				t.Errorf("failure lost inherited ID: %v", err)
+			}
+		}()
+	}
+	group.Wait()
 }
