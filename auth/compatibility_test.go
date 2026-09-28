@@ -106,21 +106,22 @@ func TestAuthorizedRequestRefreshAndNoServerErrorReplay(t *testing.T) {
 }
 
 func TestOriginEnvironmentHasNoCompiledFallback(t *testing.T) {
-	t.Setenv("TIANA_MGR_ORIGIN", "")
-	t.Setenv("TIANA_AUTH_ORIGIN", "")
+	t.Setenv("TIANA_API_ORIGIN", "")
+	t.Setenv("TIANA_MGR_ORIGIN", "https://ignored-mgr.example.test")
+	t.Setenv("TIANA_AUTH_ORIGIN", "https://ignored-auth.example.test")
 	if auth.DefaultOrigin() != "" {
-		t.Fatal("unexpected deployment fallback")
+		t.Fatal("legacy aliases or compiled origin used")
 	}
 	if _, err := auth.New(""); err == nil {
 		t.Fatal("missing origin accepted")
 	}
-	t.Setenv("TIANA_AUTH_ORIGIN", "https://auth.example.test")
-	if auth.DefaultOrigin() != "https://auth.example.test" {
-		t.Fatal("auth origin ignored")
+	t.Setenv("TIANA_API_ORIGIN", "  https://api.example.test/  ")
+	if auth.DefaultOrigin() != "https://api.example.test/" {
+		t.Fatal("API origin not used")
 	}
-	t.Setenv("TIANA_MGR_ORIGIN", "https://mgr.example.test")
-	if auth.DefaultOrigin() != "https://mgr.example.test" {
-		t.Fatal("MGR priority changed")
+	t.Setenv("TIANA_API_ORIGIN", "  ")
+	if auth.DefaultOrigin() != "" {
+		t.Fatal("blank API origin fell back to alias")
 	}
 }
 

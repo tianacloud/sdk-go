@@ -19,7 +19,7 @@ if errors.Is(err, auth.ErrAuthenticationRequired) {
 }
 ```
 
-`DefaultOrigin` checks `TIANA_MGR_ORIGIN`, then `TIANA_AUTH_ORIGIN`, then
+`DefaultOrigin` checks only `TIANA_API_ORIGIN`, then
 returns empty. No deployment address is compiled into the SDK. Empty Origin
 is rejected; the CLI retains its deployment-specific default separately.
 The origin may contain a reverse-proxy base path, which is preserved.

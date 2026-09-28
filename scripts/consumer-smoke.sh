@@ -61,9 +61,9 @@ fixture = pathlib.Path(sys.argv[1]).resolve()
 ready = json.loads((fixture / 'ready.json').read_text())
 env = {k: v for k, v in os.environ.items() if not k.startswith('TIANA_')}
 env.update(TIANA_ENDPOINT=ready['endpoint'],
-           TIANA_DIAL_ADDRESS=ready['token_address'],
+           TIANA_GATEWAY_ADDRESS=ready['token_address'],
            TIANA_CA_FILE=str(fixture / 'fixtures/gateway.pem'),
-           TIANA_TOKEN_FILE=str(fixture / 'fixtures/synthetic-token.txt'))
+           TIANA_TOKEN=(fixture / 'fixtures/synthetic-token.txt').read_text().strip())
 payload = b'consumer-go\x00\xff' * 8192
 result = subprocess.run([sys.argv[2]], input=payload, env=env,
                         capture_output=True, timeout=15)

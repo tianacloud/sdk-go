@@ -219,3 +219,46 @@ No new schema or network calls. Decoding remains linear in the bounded 8 MiB
 file; no credentials or parser excerpts may appear in diagnostics. Tests must
 cover literal legacy records, finite/never/expired/skew cases, mixed-origin
 read-modify-write, failed-save preservation, and shell's real token lookup.
+
+
+## 2026-09-28: API origin and explicit token environment
+
+Use TIANA_API_ORIGIN as the sole API-origin environment name wherever an
+origin is loaded. TIANA_MGR_ORIGIN and TIANA_AUTH_ORIGIN are ignored; do not add
+compatibility aliases. Explicit API constructor parameters remain available.
+Remove TIANA_TOKEN_FILE and raw token-file credential readers. CLI connections
+use explicit TIANA_TOKEN (presence is authoritative: empty/malformed fails),
+otherwise the selected saved account access token. SDK examples use TIANA_TOKEN;
+library constructors continue to accept explicit token values. Never log tokens.
+Account credential persistence and refresh locking are separate from raw token
+file input and remain intact. No on-disk schema, network protocol or transaction
+semantics change. Old environment names deliberately stop working without a
+migration fallback. Rollback requires reverting code/docs together.
+
+TIANA_PENDING_COMMAND_FILE, TIANA_CREDENTIALS_FILE and TIANA_GATEWAY_ADDRESS are
+under review only; this change does not remove them or pending-operation state.
+Keep bounded token validation, existing credential file protections, and explicit
+SDK dial overrides. Verify retired names cannot override current configuration,
+empty tokens fail closed, saved accounts still work, and runnable SDK examples
+accept TIANA_TOKEN without reading a raw token file. No extra network round trips
+or file reads may be introduced by environment resolution.
+
+
+## 2026-09-28: one Gateway address environment name
+
+User requires TIANA_GATEWAY_ADDRESS for example/launcher TCP overrides.
+TIANA_DIAL_ADDRESS, TIANA_GATEWAY_HOST and TIANA_GATEWAY_PORT are removed names,
+not fallback aliases. Existing explicit SDK Config.DialAddress / gateway options
+retain their API names. No implicit environment reads are added to core SDKs.
+Endpoint continues to determine TLS SNI, hostname verification and CONNECT
+identity. Override only the physical TCP destination, never certificate checks.
+
+Examples consume host:port, with bracketed IPv6. Node example adapters require a
+canonical decimal port 1-65535 and reject URLs, credentials, paths and malformed
+addresses without echoing the input. Keep these adapters in packaged examples;
+do not introduce a public library API for environment parsing. This changes no
+wire or storage format, database semantics, retry policy or connection ownership;
+parsing adds only bounded work proportional to address input before dialing.
+No migration shim: update launch environments, revert code/docs together if needed.
+Verify IPv4/hostname/IPv6 parsing, malformed input rejection, installed examples,
+and a real TLS/CONNECT exchange with conflicting removed variables present.
