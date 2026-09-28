@@ -33,7 +33,7 @@ func TestLegacyInstanceTokenExpiryLookup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "tokens.json")
 			before := legacyTokenFixture(tc.raw)
-			if err := os.WriteFile(path, before, 0600); err != nil {
+			if err := writeFixtureFile(path, before, 0600); err != nil {
 				t.Fatal(err)
 			}
 			s := NewFileInstanceTokenStore(path, "https://mgr.example")
@@ -55,7 +55,7 @@ func TestLegacyInstanceTokenExpiryLookup(t *testing.T) {
 
 func TestSavePreservesLegacyInstanceTokens(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tokens.json")
-	if err := os.WriteFile(path, legacyTokenFixture(`"9999-12-31T23:59:59.999Z"`), 0600); err != nil {
+	if err := writeFixtureFile(path, legacyTokenFixture(`"9999-12-31T23:59:59.999Z"`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	s := NewFileInstanceTokenStore(path, "https://other.example")
@@ -95,7 +95,7 @@ func TestMalformedLegacyExpiryDoesNotOverwriteStore(t *testing.T) {
 		t.Run(expiry, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "tokens.json")
 			before := legacyTokenFixture(expiry)
-			if err := os.WriteFile(path, before, 0600); err != nil {
+			if err := writeFixtureFile(path, before, 0600); err != nil {
 				t.Fatal(err)
 			}
 			s := NewFileInstanceTokenStore(path, "https://mgr.example")

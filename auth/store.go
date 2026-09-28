@@ -181,7 +181,7 @@ func atomicWritePrivate(path string, contents []byte) error {
 	if err := localfile.PrivateDir(directory); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(directory, ".tiana-credentials-*")
+	temporary, err := localfile.CreateTemp(directory, ".tiana-credentials-*")
 	if err != nil {
 		return fmt.Errorf("create private credential file: %w", err)
 	}
@@ -205,7 +205,7 @@ func atomicWritePrivate(path string, contents []byte) error {
 	if err := os.Rename(temporaryName, path); err != nil {
 		return fmt.Errorf("replace private credential file: %w", err)
 	}
-	return nil // The renamed inode already has mode 0600; do not reopen a pathname.
+	return nil // Replacement retains the private permissions established before writing.
 }
 
 func canonicalOriginKey(origin string) string {

@@ -27,7 +27,7 @@ func TestCurrentCLICredentialFiles(t *testing.T) {
 	account := `{"credentials":{"https://mgr.example.test":{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expires_at":"2099-01-01T00:00:00Z","user":{"user_id":"user-one"}}}}`
 	tokens := `{"tokens":{"https://mgr.example.test|tenant-one|token-one":{"origin":"https://mgr.example.test","tenant_id":"tenant-one","instance_id":"instance-one","endpoint_id":"endpoint-one","token_id":"token-one","token":"synthetic-instance-token","expires_at":-1,"saved_at":"2026-01-01T00:00:00Z"}}}`
 	for name, body := range map[string]string{"credentials.json": account, "instance-tokens.json": tokens} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
+		if err := writeFixtureFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -155,7 +155,7 @@ func TestConstructorsDoNotAccessCredentialFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	corrupt := []byte("intentionally invalid credential file")
-	if err := os.WriteFile(path, corrupt, 0600); err != nil {
+	if err := writeFixtureFile(path, corrupt, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := auth.New("https://mgr.example.test"); err != nil {

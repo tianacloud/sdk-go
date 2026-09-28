@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -85,23 +86,26 @@ func TestLookupTokenPrivateFileAndNoMutation(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("lookup rewrote store")
 	}
-	if err := os.Chmod(path, 0644); err != nil {
+	if err := chmodFixtureFile(path, 0644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil {
 		t.Fatal("accepted public credential file")
 	}
-	if err := os.Chmod(path, 0600); err != nil {
+	if err := chmodFixtureFile(path, 0600); err != nil {
 		t.Fatal(err)
 	}
 	link := path + ".link"
 	if err := os.Symlink(path, link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks need developer mode or privilege: %v", err)
+		}
 		t.Fatal(err)
 	}
 	if _, err := NewFileInstanceTokenStore(link, s.Origin).LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil {
 		t.Fatal("accepted symlink")
 	}
-	if err := os.WriteFile(path, []byte("not json SECRET"), 0600); err != nil {
+	if err := writeFixtureFile(path, []byte("not json SECRET"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil || err.Error() != "invalid local InstanceToken store" {

@@ -21,17 +21,20 @@
 // newest-record selection, and never falls back outside IDs returned by MGR.
 // It neither creates tokens nor retries a rejected Gateway connection.
 //
-// File stores on Linux/macOS read owned mode-0600 regular files, refuse final
-// symlinks/FIFOs, and cap JSON at 8 MiB. Other platforms fail closed for built-in
-// stores; portable applications may supply a custom CredentialStore.
-// Writes use a same-directory mode-0600 temporary file, file sync and rename
-// under an owned mode-0700 directory. Readers see a complete old or new file.
+// File stores on Linux/macOS require owned mode-0600 regular files and private
+// mode-0700 directories. Windows uses current-user ownership and owner-only
+// ACLs, checks opened disk-file handles and rejects final reparse points. Reads
+// on all three platforms reject non-regular input and cap JSON at 8 MiB. Other
+// platforms fail closed; callers may supply a custom CredentialStore.
+// Writes create a private same-directory temporary file, sync and rename it.
+// Readers see a complete old or new file.
 // Persistent adjacent .lock files serialize read-modify-write operations across
 // cooperating clients/processes. Refresh holds the account-file lock across
 // reload, server token rotation and persistence; logout uses the same lock.
 // Lock waits honor context cancellation and have a 30-second maximum. Never
 // delete lock files while clients may run. Different origins sharing one file
-// wait on the same lock; use this only on local filesystems with flock support.
+// wait on the same lock. Use local filesystems supporting flock on Linux/macOS
+// or ACLs and LockFileEx on Windows.
 // Custom stores still require external synchronization across clients/processes.
 // Older SDK/CLI binaries do not participate in these locks and must not mutate
 // the same stores concurrently. No directory fsync or power-loss guarantee is
