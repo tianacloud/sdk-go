@@ -9,13 +9,12 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 
 	tiana "github.com/tianacloud/sdk-go"
 )
 
 func run() error {
-	cfg := tiana.Config{Endpoint: os.Getenv("TIANA_ENDPOINT"), DialAddress: os.Getenv("TIANA_DIAL_ADDRESS")}
+	cfg := tiana.Config{Endpoint: os.Getenv("TIANA_ENDPOINT"), DialAddress: os.Getenv("TIANA_GATEWAY_ADDRESS")}
 	if path := os.Getenv("TIANA_CA_FILE"); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -26,17 +25,14 @@ func run() error {
 			return fmt.Errorf("invalid CA file")
 		}
 	}
-	if path := os.Getenv("TIANA_TOKEN_FILE"); path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read token file failed")
-		}
-		cfg.Token, err = tiana.NewToken(strings.TrimSpace(string(data)))
-		clear(data)
+	if raw, set := os.LookupEnv("TIANA_TOKEN"); set {
+		token, err := tiana.NewToken(raw)
 		if err != nil {
 			return err
 		}
+		cfg.Token = token
 	}
+
 	c, err := tiana.NewClient(cfg)
 	if err != nil {
 		return err

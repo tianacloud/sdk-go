@@ -175,12 +175,12 @@ one of `429/CONNECTION_LIMIT`, `503/POLICY_UNAVAILABLE`,
 ## Runnable example and verification
 
 `examples/echo` relays stdin to an echo upstream and received bytes to stdout.
-It reads an optional token from `TIANA_TOKEN_FILE` and custom trust from
+It reads an optional token from `TIANA_TOKEN` and custom trust from
 `TIANA_CA_FILE`. Example usage with an isolated fixture:
 
 ```sh
 TIANA_ENDPOINT=ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test \
-TIANA_DIAL_ADDRESS=127.0.0.1:12345 \
+TIANA_GATEWAY_ADDRESS=127.0.0.1:12345 \
 TIANA_CA_FILE=/path/to/fixture/fixtures/gateway.pem \
 go run ./examples/echo < payload.bin
 ```

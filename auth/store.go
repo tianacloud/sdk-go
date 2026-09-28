@@ -213,13 +213,7 @@ func canonicalOriginKey(origin string) string {
 }
 
 func DefaultOrigin() string {
-	if value := strings.TrimSpace(os.Getenv("TIANA_MGR_ORIGIN")); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(os.Getenv("TIANA_AUTH_ORIGIN")); value != "" {
-		return value
-	}
-	return ""
+	return strings.TrimSpace(os.Getenv("TIANA_API_ORIGIN"))
 }
 
 // readPrivateStore preserves NotExist but deliberately omits arbitrary path/OS

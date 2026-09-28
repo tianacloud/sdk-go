@@ -146,12 +146,12 @@ CONNECT 客户端不会自动重连或重放操作。`Unprocessed` 与 `Retryabl
 ## 可运行示例与验证
 
 `examples/echo` 将标准输入转发到 echo 上游，并将收到的字节写到标准输出。
-它可从 `TIANA_TOKEN_FILE` 读取令牌，从 `TIANA_CA_FILE` 读取自定义信任证书。
+它可从 `TIANA_TOKEN` 直接读取令牌值，从 `TIANA_CA_FILE` 读取自定义信任证书。
 使用隔离测试夹具的示例：
 
 ```sh
 TIANA_ENDPOINT=ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test \
-TIANA_DIAL_ADDRESS=127.0.0.1:12345 \
+TIANA_GATEWAY_ADDRESS=127.0.0.1:12345 \
 TIANA_CA_FILE=/path/to/fixture/fixtures/gateway.pem \
 go run ./examples/echo < payload.bin
 ```

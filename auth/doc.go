@@ -2,8 +2,8 @@
 // credential stores. It is separate from the root package's CONNECT transport:
 // MGR account access/refresh tokens must never be used as InstanceTokens.
 //
-// New requires an explicit MGR origin. DefaultOrigin resolves TIANA_MGR_ORIGIN,
-// then TIANA_AUTH_ORIGIN, and returns empty when neither is set. There is no
+// New requires an explicit MGR origin. DefaultOrigin reads TIANA_API_ORIGIN
+// and returns empty when it is unset or blank. There is no
 // compiled deployment address. By default, account and InstanceToken files use
 // $XDG_CONFIG_HOME/tiana, or ~/.config/tiana when XDG_CONFIG_HOME is unset.
 // Store paths and JSON formats match the existing CLI; no migration is needed.

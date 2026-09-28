@@ -3,6 +3,9 @@ package tiana
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"golang.org/x/net/http2"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +20,14 @@ func TestConsumerEcho(t *testing.T) {
 	if binary == "" {
 		t.Skip("run scripts/consumer-smoke.sh for the separate-module consumer")
 	}
-	server := echoServer(t)
+	const token = "synthetic-consumer-token"
+	received := make(chan string, 1)
+	server := listenTest(t, testTLS(t, "endpoint"), func(conn *tls.Conn) {
+		(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			received <- r.Header.Get("Proxy-Authorization")
+			echoHandler(w, r)
+		})})
+	})
 	cert, err := filepath.Abs("testdata/tls/endpoint_certificate.pem")
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +40,7 @@ func TestConsumerEcho(t *testing.T) {
 			cmd.Env = append(cmd.Env, entry)
 		}
 	}
-	cmd.Env = append(cmd.Env, "TIANA_ENDPOINT="+testEndpoint+testEndpointSuffix, "TIANA_DIAL_ADDRESS="+server.listener.Addr().String(), "TIANA_CA_FILE="+cert)
+	cmd.Env = append(cmd.Env, "TIANA_ENDPOINT="+testEndpoint+testEndpointSuffix, "TIANA_GATEWAY_ADDRESS="+server.listener.Addr().String(), "TIANA_CA_FILE="+cert, "TIANA_TOKEN="+token, "TIANA_DIAL_ADDRESS=invalid-removed-address", "TIANA_GATEWAY_HOST=invalid-removed-host", "TIANA_GATEWAY_PORT=invalid-removed-port", "TIANA_TOKEN_FILE="+filepath.Join(t.TempDir(), "nonexistent-retired-token-file"))
 	payload := bytes.Repeat([]byte("consumer-go\x00\xff"), 8192)
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout, stderr bytes.Buffer
@@ -38,6 +48,14 @@ func TestConsumerEcho(t *testing.T) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("consumer failed: %v (stderr %d bytes)", err, stderr.Len())
+	}
+	select {
+	case got := <-received:
+		if got != "Bearer "+token {
+			t.Fatal("consumer did not use explicit token")
+		}
+	default:
+		t.Fatal("consumer did not connect")
 	}
 	want := append([]byte("HELLO"), payload...)
 	want = append(want, []byte("EOF")...)
