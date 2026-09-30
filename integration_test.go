@@ -32,9 +32,10 @@ func TestGatewaySnapshot(t *testing.T) {
 	if err := json.Unmarshal(data, &ready); err != nil {
 		t.Fatal(err)
 	}
-	if ready["gateway_commit"] != "9f5aa69b24aa6e04112baaf8d1e17c0639fd293b" {
+	if ready["gateway_commit"] == "" || ready["gateway_commit"] != os.Getenv("TIANA_GATEWAY_SOURCE_REVISION") {
 		t.Fatal("unexpected Gateway source")
 	}
+	t.Logf("Gateway source %s dirty=%s", ready["gateway_commit"], ready["gateway_dirty"])
 	ca, err := os.ReadFile(filepath.Join(root, "fixtures/gateway.pem"))
 	if err != nil {
 		t.Fatal(err)

@@ -1,4 +1,4 @@
-// Loopback-only interoperability fixture for the pinned Gateway source.
+// Loopback-only interoperability fixture for the selected Gateway source.
 // Ingress, TLS/H2, orchestration and relay are real; Control/locator and the
 // byte-echo Agent are synthetic. This does not validate production databases.
 use gateway_protocol::route::{ClientHello, ServerHello, ServerStatus};
@@ -16,8 +16,8 @@ use gateway_runtime::{
 use gateway_services::{
     AgentAddress, AgentHandle, AuthMode, ClockSample, EndpointAccess, EndpointId,
     EnsureActiveRequest, FakeControlAuthorization, FakeRuntimeLocator, InstanceId, LocateRequest,
-    LocatedAgent, MonotonicTimeMs, PresentedToken, QuotaReason, ResolvePolicyRequest, RouteCache,
-    RouteRevision, RuntimeAddress, RuntimeLocateKey, TokenResult, WallTimeMs,
+    LocatedAgent, MonotonicTimeMs, PresentedToken, QuotaReason, RawToken, ResolvePolicyRequest,
+    RouteCache, RouteRevision, RuntimeAddress, RuntimeLocateKey, TokenResult, WallTimeMs,
 };
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
@@ -29,7 +29,10 @@ const INSTANCE: &str = "instance-sdk-fixture";
 const RUNTIME_ADDRESS: &str = "127.0.0.1:1";
 const ROUTE_REVISION: u64 = 1;
 // Public test input: 32 zero bytes, never a deployment credential.
-const SYNTHETIC_TOKEN: &str = "tia_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const SYNTHETIC_TOKEN: &str = "tia_0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+fn synthetic_token() -> PresentedToken {
+    PresentedToken::from_raw(RawToken::new(SYNTHETIC_TOKEN.as_bytes().to_vec()))
+}
 struct FixedClock;
 fn fixed_clock() -> gateway_services::ClockSnapshot {
     gateway_services::ClockSnapshot {
@@ -62,8 +65,7 @@ impl PublicConnectService for RuntimeService {
         token: &'a mut PresentedToken,
         budget: Duration,
     ) -> gateway_public::ConnectFuture<'a> {
-        if self.authenticated
-            && token.with_raw_bytes(|raw| raw == SYNTHETIC_TOKEN.as_bytes()) == Some(false)
+        if self.authenticated && token.is_present() && token.digest() != synthetic_token().digest()
         {
             token.clear();
             return Box::pin(async { Err(PublicServiceError::AccessDenied) });
@@ -163,6 +165,7 @@ async fn runtime_service_for_agent(
 
     let policy = FakeControlAuthorization::default();
     let policy_response = EndpointAccess {
+        owners: None,
         endpoint_id: endpoint_id.clone(),
         instance_id: instance_id.clone(),
         branch_id: gateway_services::BranchId::new("main").unwrap(),
@@ -172,6 +175,10 @@ async fn runtime_service_for_agent(
             AuthMode::Disabled
         },
         token: authenticated.then_some(TokenResult {
+            kind: 0,
+            digest: synthetic_token().digest().unwrap().to_sha256_string(),
+            owner_id: ENDPOINT.into(),
+            cache_deadline_ms: None,
             allowed: true,
             expire_time: -1,
             revision: 1,
@@ -294,7 +301,13 @@ async fn main() {
     );
     ready.insert(
         "gateway_commit".into(),
-        "9f5aa69b24aa6e04112baaf8d1e17c0639fd293b".into(),
+        std::env::var("TIANA_GATEWAY_SOURCE_REVISION")
+            .unwrap()
+            .into(),
+    );
+    ready.insert(
+        "gateway_dirty".into(),
+        std::env::var("TIANA_GATEWAY_SOURCE_DIRTY").unwrap().into(),
     );
     ready.insert("greeting".into(), "HELLO".into());
     ready.insert("eof_tail".into(), "EOF-TAIL".into());

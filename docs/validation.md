@@ -26,23 +26,26 @@ The public distribution manifest hashes its listed artifacts and itself
 be reviewed and their manifest hashes regenerated; deleting integrity checks
 is not an acceptable update procedure.
 
-## Pinned Gateway interoperability
+## Selected Gateway interoperability
 
-The opt-in harness targets Gateway commit
-`9f5aa69b24aa6e04112baaf8d1e17c0639fd293b`. Supply a clean checkout of that
-revision; the runner refuses a different HEAD or a dirty tree. It never
-fetches private sources or credentials. Rust/Cargo, Go, Python 3, Bash and
-access to the public dependency registries are required.
+The opt-in harness uses the supplied Gateway source checkout and records its
+actual commit and dirty status. This validates the selected source combination,
+not a published Gateway artifact. It never fetches private sources or credentials.
+Rust/Cargo, Go, Python 3 and Bash are required. Cargo runs offline; populate the
+approved dependency cache before running this check.
 
 ```sh
 python3 scripts/test-gateway.py /absolute/path/to/gateway-checkout
+# Optionally run the Node SDK against the same live Gateway fixture:
+python3 scripts/test-gateway.py /absolute/path/to/gateway-checkout /absolute/path/to/sdk-node
 ```
 
 The runner builds a local fixture with path dependencies on Gateway crates.
 It copies the Gateway lockfile for dependency resolution, uses the SDK's
 synthetic TLS identity, binds only loopback, and cleans its temporary files
-and server process on exit. Standard Cargo/Go caches follow their environment
-variables. Source checkouts remain unchanged.
+and server process on exit. Cargo reuses the supplied Gateway checkout's target
+directory; Go uses its normal cache. Source checkouts remain unchanged. Synthetic
+authentication uses a current Endpoint credential, supplied unchanged by clients.
 
 Real Gateway ingress, TLS/H2, orchestration and relay serve SDK tunnels for
 all five profiles, both anonymous and authenticated. Tests check server-first
@@ -59,10 +62,11 @@ To run only Go checks against an already running equivalent fixture:
 
 ```sh
 TIANA_GATEWAY_FIXTURE=/absolute/path/to/fixture \
+TIANA_GATEWAY_SOURCE_REVISION=<selected-checkout-commit> \
   go test -race -tags=integration -run TestGatewaySnapshot -count=1 -v .
 ```
 
-`ready.json` records the pinned `gateway_commit`, complete `endpoint`,
+`ready.json` records `gateway_commit`, `gateway_dirty`, complete `endpoint`,
 `anonymous_address`, `token_address`, greeting/tail and refusal listener
 addresses used by the integration test. It also supplies
 `fixtures/gateway.pem` and `fixtures/synthetic-token.txt`. Missing fixture
