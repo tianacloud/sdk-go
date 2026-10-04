@@ -20,6 +20,7 @@ const (
 	MySQL          Profile = "mysql"
 	PostgreSQL     Profile = "postgresql"
 	Git            Profile = "git"
+	TianaHTTP      Profile = "tiana-http"
 )
 
 var endpointID = regexp.MustCompile(`^ep-[0-7][0-9a-hjkmnp-tv-z]{25}$`)

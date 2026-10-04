@@ -91,7 +91,7 @@ TLS 证书校验保持启用，要求 TLS 1.3 和 ALPN `h2`。
 不同凭据或信任根应使用不同的 Client。格式化 Token、Config、Client 和 Tunnel
 时会脱敏，包括复制后的 Token 值和容器中的 Token。根包 CONNECT 不输出日志。
 
-`HranaHTTP`、`HranaWebSocket`、`MySQL`、`PostgreSQL` 和 `Git`
+`HranaHTTP`、`HranaWebSocket`、`MySQL`、`PostgreSQL`、`Git` 和 `TianaHTTP`
 分别选择 Gateway 的 `hrana-http`、`hrana-websocket`、`mysql`、
 `postgresql` 和 `git` profile。隧道透传字节，SDK 不解析应用协议。
 数据库协议自身的鉴权仍由调用方单独提供。
@@ -191,3 +191,7 @@ Gateway、Agent、数据库组合完全兼容，也不验证数据库事务语�
 
 Go 管理的凭据字符串和库缓冲区无法保证被清零；
 原始令牌输入的存储和生命周期由调用方管理。
+
+### Web 通道（尚未发布的源码候选）
+
+`fetch.NewResourceClient` 把 GET/HEAD 原生HTTP经CONNECT透传，使用channel=0/data.sock，保留压缩字节；`fetch.NewClient` 使用tiana-http Fetch访问channel=1/http-data.sock上的Web管控API。无metadata channel字段，Gateway–Agent仍为v4；发布API要求目标实例的有效Token。两者均不自动重试或重放。

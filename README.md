@@ -117,7 +117,7 @@ Config, Client and Tunnel values redacts their contents, including copied Token
 values and tokens in formatted containers. The root CONNECT package emits no logs.
 
 `HranaHTTP`, `HranaWebSocket`, `MySQL`, `PostgreSQL` and `Git` select Gateway
-profiles (`hrana-http`, `hrana-websocket`, `mysql`, `postgresql`, `git`). All carry
+profiles (`hrana-http`, `hrana-websocket`, `mysql`, `postgresql`, `git`, `tiana-http`). All carry
 opaque bytes; the SDK provides the CONNECT transport. Authentication inside
 the database protocol remains the caller's separate input.
 
@@ -223,3 +223,13 @@ has been published to a review branch or release respectively.
 
 Go-managed credential strings and library buffers cannot be guaranteed to be
 zeroized; callers control the original token input's storage and lifetime.
+
+### Web resource and publication transports
+
+`fetch.NewResourceClient` sends GET/HEAD as native HTTP/1.1 through a regular
+CONNECT stream using `tiana.TianaHTTP`, selecting channel=0/data.sock. Encoded
+bytes remain encoded; no automatic redirect, decompression or request replay.
+`fetch.NewClient` sends HTTP control through TFQ1/TFS1 with protocol=tiana-http,
+selecting channel=1/http-data.sock. There is no metadata channel selector.
+Publication endpoints are under /_tiana/web/ and require an instance-owned Token.
+Both reuse Gateway–Agent v4. Consumers must pin a published module revision containing these additions.

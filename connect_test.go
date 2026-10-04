@@ -558,7 +558,7 @@ func TestSuccessHeadersClosedAndRedacted(t *testing.T) {
 // Every profile must reach the Gateway verbatim, including server-first and
 // half-close behavior: the SDK does not interpret the inner protocol.
 func TestGatewayProfiles(t *testing.T) {
-	for _, profile := range []Profile{HranaHTTP, HranaWebSocket, MySQL, PostgreSQL, Git} {
+	for _, profile := range []Profile{HranaHTTP, HranaWebSocket, MySQL, PostgreSQL, Git, TianaHTTP} {
 		t.Run(string(profile), func(t *testing.T) {
 			observed := make(chan string, 1)
 			s := listenTest(t, testTLS(t, "endpoint"), func(conn *tls.Conn) {

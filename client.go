@@ -109,7 +109,7 @@ func NewClient(cfg Config) (*Client, error) {
 // ctx governs both establishment and the returned tunnel's entire lifetime.
 func (c *Client) Connect(ctx context.Context, profile Profile) (*Tunnel, error) {
 	switch profile {
-	case HranaHTTP, HranaWebSocket, MySQL, PostgreSQL, Git:
+	case HranaHTTP, HranaWebSocket, MySQL, PostgreSQL, Git, TianaHTTP:
 	default:
 		return nil, failure(Configuration, "unsupported profile", false)
 	}
