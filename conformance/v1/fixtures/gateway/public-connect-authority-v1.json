@@ -1,0 +1,12 @@
+{
+  "authority_version": 1,
+  "endpoint_form": "deployment_hostname",
+  "default_port": 443,
+  "cases": [
+    {"input": "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test", "hostname": "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test"},
+    {"input": "EP-01J5C9M7Q2V8X4K6N3R0T1W2YZ.DB.EXAMPLE.TEST", "hostname": "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test"},
+    {"input": "ep-01j5c9m7q2v8x4k6n3r0t1w2yz", "invalid": true},
+    {"input": "https://ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test", "invalid": true},
+    {"input": "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test:443", "invalid": true}
+  ]
+}

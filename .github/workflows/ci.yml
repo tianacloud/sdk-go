@@ -1,0 +1,42 @@
+name: Go SDK
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.25.0', 'stable']
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: go.sum
+      - name: Formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Test and vet
+        run: |
+          go test -mod=readonly -race -timeout 2m ./...
+          go vet -mod=readonly ./...
+      - name: Public source and independent consumer
+        run: |
+          python3 scripts/test-source-tools.py
+          python3 scripts/check-public-source.py
+          bash scripts/consumer-smoke.sh
+      - name: Module metadata
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
