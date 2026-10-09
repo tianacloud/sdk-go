@@ -494,7 +494,7 @@ func TestErrorMappingAndNoReplay(t *testing.T) {
 		status int
 		code   string
 		retry  bool
-	}{{403, "QUOTA_EXCEEDED", false}, {400, "MALFORMED_CONNECT", false}, {400, "EARLY_TUNNEL_DATA", false}, {407, "AUTH_REQUIRED", false}, {407, "ACCESS_DENIED", false}, {407, "AUTHORIZATION_EXPIRED", false}, {504, "CALLER_DEADLINE", false}, {421, "ENDPOINT_MISMATCH", false}, {429, "CONNECTION_LIMIT", true}, {503, "POLICY_UNAVAILABLE", true}, {503, "INSTANCE_UNAVAILABLE", true}, {504, "ACTIVATION_TIMEOUT", true}}
+	}{{403, "QUOTA_EXCEEDED", false}, {400, "MALFORMED_CONNECT", false}, {400, "EARLY_TUNNEL_DATA", false}, {407, "AUTH_REQUIRED", false}, {407, "ACCESS_DENIED", false}, {407, "AUTHORIZATION_EXPIRED", false}, {504, "CALLER_DEADLINE", false}, {421, "ENDPOINT_MISMATCH", false}, {429, "CONNECTION_LIMIT", true}, {503, "POLICY_UNAVAILABLE", true}, {503, "INSTANCE_UNAVAILABLE", true}, {504, "ACTIVATION_TIMEOUT", true}, {503, "ACTIVATION_RESOURCE_PRESSURE", true}, {503, "ACTIVATION_NO_IDLE_POD", true}, {503, "ACTIVATION_CAPACITY_UNAVAILABLE", true}}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
 			var requests atomic.Int32

@@ -64,7 +64,7 @@ func (e *Error) Retryable() bool {
 		return false
 	}
 	return (e.Status == 429 && e.Code == "CONNECTION_LIMIT") ||
-		(e.Status == 503 && (e.Code == "POLICY_UNAVAILABLE" || e.Code == "INSTANCE_UNAVAILABLE")) ||
+		(e.Status == 503 && (e.Code == "POLICY_UNAVAILABLE" || e.Code == "INSTANCE_UNAVAILABLE" || e.Code == "ACTIVATION_RESOURCE_PRESSURE" || e.Code == "ACTIVATION_NO_IDLE_POD" || e.Code == "ACTIVATION_CAPACITY_UNAVAILABLE")) ||
 		(e.Status == 504 && e.Code == "ACTIVATION_TIMEOUT")
 }
 
