@@ -110,6 +110,11 @@ optionally changes only the physical TCP target.
 `Config.RootCAs` replaces system trust roots when supplied; the SDK clones it.
 TLS verification remains enabled, with TLS 1.3 and ALPN `h2` required.
 
+For HTTP CONNECT or SOCKS5 proxies, pass an explicit `Config.Network` policy
+from the [`outbound` package](docs/outbound-proxies.md). The same field is
+available on `fetch.Config`, including native resource requests. A nil policy
+keeps direct dialing. SDK constructors never load proxy environment variables.
+
 Omit `Token` for an Endpoint whose policy permits anonymous access. Supplied
 tokens are opaque credential strings. A token belongs to its Client;
 different credentials or trust roots use separate Clients. Formatting Token,

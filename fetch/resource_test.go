@@ -16,6 +16,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tianacloud/sdk-go/internal/proxytest"
+	"github.com/tianacloud/sdk-go/outbound"
 )
 
 func TestNativeResourceHTTPOverConnectPreservesEncodedBodyAndHead(t *testing.T) {
@@ -67,21 +70,46 @@ func TestNativeResourceHTTPOverConnectPreservesEncodedBodyAndHead(t *testing.T) 
 	defer server.Close()
 	roots := x509.NewCertPool()
 	roots.AddCert(cert)
-	client, err := NewResourceClient(Config{Endpoint: endpoint, DialAddress: server.Listener.Addr().String(), RootCAs: roots, Token: "tia_1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	for _, method := range []string{"GET", "HEAD"} {
-		response, err := client.Do(context.Background(), Request{Method: method, PathQuery: "/asset?literal=1", Headers: []Header{{"accept-encoding", "gzip"}}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil || response.Status != 200 || response.Header.Get("Content-Encoding") != "gzip" || response.Header.Get("Content-Length") != "7" || method == "GET" && string(body) != string(encoded) || method == "HEAD" && len(body) != 0 {
-			t.Fatalf("native %s representation mismatch: %v", method, err)
-		}
+	for _, route := range []string{"direct", "http", "https", "socks5h"} {
+		t.Run(route, func(t *testing.T) {
+			config := Config{Endpoint: endpoint, DialAddress: server.Listener.Addr().String(), RootCAs: roots, Token: "tia_1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+			if route != "direct" {
+				var peer *proxytest.Proxy
+				if route == "socks5h" {
+					peer = proxytest.SOCKS(t, server.Listener.Addr().String(), false)
+				} else {
+					peer = proxytest.HTTP(t, server.Listener.Addr().String(), route == "https")
+				}
+				policy, err := outbound.New(outbound.Config{AllProxy: peer.URL, ProxyRootCAs: peer.Roots})
+				if err != nil {
+					t.Fatal(err)
+				}
+				config.Network = policy
+				config.DialAddress = ""
+				config.Port = "9443"
+				defer func() {
+					if len(peer.Requests()) != 1 || peer.Requests()[0].Address != endpoint+":9443" {
+						t.Error("resource network configuration not forwarded")
+					}
+				}()
+			}
+			client, err := NewResourceClient(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			for _, method := range []string{"GET", "HEAD"} {
+				response, err := client.Do(context.Background(), Request{Method: method, PathQuery: "/asset?literal=1", Headers: []Header{{"accept-encoding", "gzip"}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(response.Body)
+				response.Body.Close()
+				if err != nil || response.Status != 200 || response.Header.Get("Content-Encoding") != "gzip" || response.Header.Get("Content-Length") != "7" || method == "GET" && string(body) != string(encoded) || method == "HEAD" && len(body) != 0 {
+					t.Fatalf("native %s representation mismatch: %v", method, err)
+				}
+			}
+		})
 	}
 }
 func TestNativeResourceRejectsMutationBeforeDialAndBoundsBody(t *testing.T) {

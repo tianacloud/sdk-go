@@ -10,23 +10,32 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tianacloud/sdk-go/outbound"
 )
 
 // Config is copied by NewClient. RootCAs replaces system roots when non-nil.
 // DialAddress changes only the TCP destination; SNI/authority remain Endpoint.
 type Config struct {
-	Endpoint        string
-	Token           *Token
-	RootCAs         *x509.CertPool
-	DialAddress     string
+	Endpoint    string
+	Token       *Token
+	RootCAs     *x509.CertPool
+	DialAddress string
+	// Port selects the logical network port for dialing/routing, default 443.
+	// Gateway CONNECT authority remains Endpoint:443; DialAddress overrides only
+	// the physical destination and never changes proxy bypass matching.
+	Port            string
 	UserAgent       string
 	ConnectTimeout  time.Duration
 	ResponseTimeout time.Duration
 	MaxStreams      int
+	// Network explicitly supplies proxy routing. Nil preserves direct dialing.
+	Network *outbound.Policy
 	// OnRequestID receives the connection identity before network I/O.
 	// Calls may be concurrent; keep the callback brief. Panics are ignored.
 	OnRequestID func(string)
@@ -56,6 +65,13 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, err
 	}
 	cfg.Endpoint = host
+	if cfg.Port == "" {
+		cfg.Port = "443"
+	}
+	networkPort, portErr := strconv.Atoi(cfg.Port)
+	if portErr != nil || networkPort < 1 || networkPort > 65535 || strconv.Itoa(networkPort) != cfg.Port {
+		return nil, failure(Configuration, "invalid network port", false)
+	}
 	if cfg.Token != nil {
 		token, err := NewToken(cfg.Token.value)
 		if err != nil {
@@ -64,7 +80,7 @@ func NewClient(cfg Config) (*Client, error) {
 		cfg.Token = token
 	}
 	if cfg.DialAddress == "" {
-		cfg.DialAddress = net.JoinHostPort(host, "443")
+		cfg.DialAddress = net.JoinHostPort(host, cfg.Port)
 	}
 	dialHost, port, err := net.SplitHostPort(cfg.DialAddress)
 	portNumber, portErr := strconv.Atoi(port)
@@ -196,10 +212,29 @@ func (c *Client) getSession(ctx context.Context) (*session, error) {
 	stop := context.AfterFunc(c.ctx, cancel)
 	defer stop()
 	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", c.cfg.DialAddress)
+	var conn net.Conn
+	var err error
+	if c.cfg.Network == nil {
+		conn, err = (&net.Dialer{}).DialContext(dialCtx, "tcp", c.cfg.DialAddress)
+	} else {
+		conn, err = c.cfg.Network.DialTunnel(dialCtx, outbound.Target{URL: &url.URL{Scheme: "https", Host: net.JoinHostPort(c.cfg.Endpoint, c.cfg.Port)}, DialAddress: c.cfg.DialAddress})
+	}
 	if err != nil {
 		if dialCtx.Err() != nil {
 			return nil, contextFailure(dialCtx.Err(), false)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, contextFailure(context.DeadlineExceeded, false)
+		}
+		if errors.Is(err, context.Canceled) {
+			return nil, contextFailure(context.Canceled, false)
+		}
+		var proxyError *outbound.Error
+		if errors.As(err, &proxyError) {
+			failure := failure(Proxy, "proxy establishment failed", false)
+			failure.ProxyStatus = proxyError.ProxyStatus
+			failure.cause = proxyError
+			return nil, failure
 		}
 		return nil, failure(TCP, "connection failed", false)
 	}
