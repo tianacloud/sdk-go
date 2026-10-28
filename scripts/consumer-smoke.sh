@@ -51,6 +51,36 @@ GO
 (cd "$smoke_root/app" && go mod tidy && go build -o "$smoke_root/echo" .)
 (cd "$smoke_root/app" && go build -o "$smoke_root/auth-smoke" ./cmd/auth-smoke)
 "$smoke_root/auth-smoke" "$smoke_root/auth-state"
+mkdir -p "$smoke_root/app/cmd/function-smoke"
+cat > "$smoke_root/app/cmd/function-smoke/main.go" <<'GO'
+package main
+
+import (
+ "fmt"
+ "net/http"
+ "os"
+ "github.com/tianacloud/sdk-go/function"
+)
+
+func main() {
+ path := os.Args[1]
+ if err := os.Setenv("FUNCTION_CONFIG_FILE", path); err != nil { panic(err) }
+ if err := os.WriteFile(path, []byte(`{"MODE":"ready"}`), 0600); err != nil { panic(err) }
+ config, err := function.ReadConfig()
+ if err != nil || config["MODE"] != "ready" { panic("parameter read failed") }
+ if err := os.WriteFile(path, []byte(`{"MODE":`), 0600); err != nil { panic(err) }
+ config, err = function.ReadConfig()
+ if err != nil || config["MODE"] != "ready" { panic("last good parameters lost") }
+ request, _ := http.NewRequest("GET", "https://function.example.test/", nil)
+ request.Header.Set("tiana-caller-user-id", "user-example")
+ request.Header.Set("tiana-caller-tenant-id", "tenant-example")
+ caller, present := function.CallerFromRequest(request)
+ if !present || caller.UserID != "user-example" || caller.TenantID != "tenant-example" { panic("caller read failed") }
+ fmt.Println("Independent Function consumer: PASS")
+}
+GO
+(cd "$smoke_root/app" && go build -o "$smoke_root/function-smoke" ./cmd/function-smoke)
+"$smoke_root/function-smoke" "$smoke_root/function-config.json"
 if [[ -z "$fixture_root" ]]; then
   (cd "$smoke_root/sdk-go" && TIANA_CONSUMER_BINARY="$smoke_root/echo" \
     go test -mod=readonly -run '^TestConsumerEcho$' -count=1 -timeout 30s -v .)
