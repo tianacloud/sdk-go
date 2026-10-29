@@ -7,15 +7,22 @@ parameters, err := function.ReadConfig()
 if err != nil {
     return err
 }
-endpoint := parameters["SQLITE_ENDPOINT"]
-token := parameters["SQLITE_TOKEN"]
+endpoint, ok := parameters.Get("SQLITE_ENDPOINT")
+if !ok {
+    return errors.New("SQLITE_ENDPOINT is not configured")
+}
+token, ok := parameters.Get("SQLITE_TOKEN")
+if !ok {
+    return errors.New("SQLITE_TOKEN is not configured")
+}
 ```
 
 The platform supplies `FUNCTION_CONFIG_FILE`, pointing to the function's read-only
 JSON parameter file. Each call reads the file, so a later call can observe saved
 parameter changes without restarting the function. During an incomplete update,
 the last successfully decoded configuration is returned; a failed initial read
-returns an error. Each returned map is independent. This helper reads parameters;
+returns an error. Each returned Config is independent. Get returns the value and its presence; an
+existing empty value returns true, while a missing key returns false. This helper reads parameters;
 changes are made in Console.
 
 Inside an HTTP handler, read the authenticated caller for that request:
@@ -41,7 +48,7 @@ exposed HTTP server.
 declaration. Consumer tests check the implementation against it; cross-component
 acceptance checks its bytes against the contracts artifact and reads actual
 Gateway/App request bytes with this public SDK. The declaration has no runtime
-network or private module dependency. The Function helpers are available in the `v1.1.0-function.1` prerelease.
+network or private module dependency. The Function helpers are available in the `v1.1.0-function.2` prerelease.
 Full environment acceptance is tracked separately from package tests. The shared
 declaration source is recorded below.
 
