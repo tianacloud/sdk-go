@@ -83,3 +83,30 @@ func TestReadConfigConcurrentCallersOwnTheirMaps(t *testing.T) {
 	}
 	workers.Wait()
 }
+
+func TestConfigGet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("FUNCTION_CONFIG_FILE", path)
+	if err := os.WriteFile(path, []byte(`{"MESSAGE":"hello","EMPTY":""}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	params, err := ReadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		key, value string
+		present    bool
+	}{
+		{"MESSAGE", "hello", true}, {"EMPTY", "", true}, {"MISSING", "", false},
+	} {
+		value, ok := params.Get(tc.key)
+		if value != tc.value || ok != tc.present {
+			t.Errorf("Get(%q) = %q, %v", tc.key, value, ok)
+		}
+	}
+	var empty Config
+	if value, ok := empty.Get("MESSAGE"); value != "" || ok {
+		t.Fatalf("zero config: %q, %v", value, ok)
+	}
+}
