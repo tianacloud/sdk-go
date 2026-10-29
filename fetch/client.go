@@ -22,6 +22,7 @@ import (
 	"time"
 
 	tiana "github.com/tianacloud/sdk-go"
+	"github.com/tianacloud/sdk-go/outbound"
 )
 
 const MaxBody int64 = 16 << 20
@@ -35,6 +36,8 @@ type Config struct {
 	Endpoint, Token, DialAddress, Port string
 	RootCAs                            *x509.CertPool
 	Timeout                            time.Duration
+	// Network explicitly supplies proxy routing. Nil preserves direct dialing.
+	Network *outbound.Policy
 }
 
 func (Config) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, "fetch.Config([REDACTED])") }
@@ -122,6 +125,23 @@ func NewClient(c Config) (*Client, error) {
 		}
 		authority = net.JoinHostPort(host, c.Port)
 	}
+	if c.Network != nil {
+		transport.DialContext = nil
+		transport.DialTLSContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			setup, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			raw, err := c.Network.DialTunnel(setup, outbound.Target{URL: &url.URL{Scheme: "https", Host: authority}, DialAddress: c.DialAddress})
+			if err != nil {
+				return nil, err
+			}
+			connection := tls.Client(raw, tlsCfg)
+			if err := connection.HandshakeContext(setup); err != nil {
+				_ = raw.Close()
+				return nil, errors.New("fetch target TLS verification or handshake failed")
+			}
+			return connection, nil
+		}
+	}
 	return &Client{origin: "https://" + authority, token: c.Token, transport: transport, http: &http.Client{Transport: transport, Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (c *Client) Close() { c.transport.CloseIdleConnections() }
@@ -185,6 +205,10 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 	}
 	res, e := c.http.Do(req)
 	if e != nil {
+		var proxyError *outbound.Error
+		if errors.As(e, &proxyError) {
+			return nil, fmt.Errorf("%w: %w", ErrTransport, proxyError)
+		}
 		return nil, ErrTransport
 	}
 	if res.StatusCode != 200 {

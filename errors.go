@@ -13,6 +13,7 @@ type ErrorKind string
 const (
 	Configuration ErrorKind = "configuration"
 	TCP           ErrorKind = "tcp"
+	Proxy         ErrorKind = "proxy"
 	TLS           ErrorKind = "tls"
 	HTTP2         ErrorKind = "http2"
 	Response      ErrorKind = "response"
@@ -27,9 +28,11 @@ const (
 // Committed means a complete 200 response was seen; a failed committed session
 // has an unknown inner outcome. No SDK operation automatically retries.
 type Error struct {
-	Kind        ErrorKind
-	Committed   bool
-	Status      int
+	Kind      ErrorKind
+	Committed bool
+	Status    int
+	// ProxyStatus belongs to the outer proxy, never to the Tiana Gateway.
+	ProxyStatus int
 	Code        string
 	RetryAfter  time.Duration
 	Unprocessed bool

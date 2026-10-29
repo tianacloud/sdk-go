@@ -282,3 +282,25 @@ retain their identity/archive and are never automatically replayed. No wire,
 schema, token issuance, storage or Gateway–Agent version changes are involved.
 This current decision supersedes earlier instance-only Web publication and
 account-credentials-never-reach-Gateway guidance.
+
+## Explicit outbound proxy policy
+
+The public outbound package uses immutable,
+explicit HTTPProxy/HTTPSProxy/AllProxy/NoProxy configuration. Validate bounded
+inputs before dialing; nil Network in Gateway/fetch preserves direct behavior.
+SDK constructors do not read environment, files or credentials. Use pinned
+x/net httpproxy and SOCKS5 with context cancellation; share a bounded HTTP
+CONNECT adapter for native streams. Preserve original SNI, verified TLS/H2,
+pre-200 barriers, request identities, stream ownership and no replay/fallback.
+Both socks5 schemes use remote target DNS. Proxy credentials stay in the outer
+handshake; errors retain only safe classifications/status and context sentinels.
+Policy owns no pools and is concurrent; clients own returned sockets. CONNECT
+headers stay within 16 KiB/64 fields and setup shares the caller's deadline.
+Verify real HTTP/HTTPS/SOCKS peers, remote DNS, cancellation, credential separation,
+TLS failures, Gateway/fetch/resource flows, race/vet and source/consumer checks.
+Rollback removes Network injection and loses proxy access without storage or
+wire migration. CLI delivery still requires a separately authorized immutable
+SDK publication before updating its public dependency pin.
+Config.Port keeps the logical network port separate from physical DialAddress
+and fixed Gateway CONNECT authority 443; an empty Port means 443. Preserve
+this distinction in NO_PROXY, including resource and SQLite adapters.

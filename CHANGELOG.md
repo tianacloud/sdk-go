@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add an explicit `outbound.Policy` for HTTP/HTTPS CONNECT and SOCKS5 TCP proxies,
+  with scheme-specific selection, `AllProxy` fallback and `NoProxy` matching.
+  Both SOCKS schemes resolve target hostnames at the proxy. The SDK does not
+  read proxy environment variables; callers supply configuration explicitly.
+- Add `Config.Network` to Gateway and fetch clients, forward it to native
+  resource requests, and expose outer proxy failures separately from Gateway
+  status. Preserve verified target TLS, bounded setup and no replay/fallback.
+- Add Gateway `Config.Port` for the logical network destination and proxy bypass
+  matching; CONNECT authority remains `Endpoint:443`. Nil Network and an empty
+  Port retain prior defaults. The added exported struct fields require updates
+  to external unkeyed struct literals; keyed configurations remain compatible.
+
 - Reject automatic MGR HTTP redirects, including caller-provided redirect policy,
   to prevent credential body replay. Configure the final MGR address directly.
 - Redact copied InstanceToken values and tokens inside formatted containers.
