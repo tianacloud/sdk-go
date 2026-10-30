@@ -20,7 +20,7 @@ func TestReadConfigInPlaceUpdate(t *testing.T) {
 	if _, err := ReadConfig(); err == nil {
 		t.Fatal("first incomplete read must fail")
 	}
-	write(`{"TOKEN":"first","MODE":"old"}`)
+	write(`{"TOKEN":{"kind":"plain","value":"first"},"MODE":{"kind":"plain","value":"old"}}`)
 	values, err := ReadConfig()
 	if err != nil || values["TOKEN"] != "first" {
 		t.Fatalf("initial read: %v %v", values, err)
@@ -31,7 +31,7 @@ func TestReadConfigInPlaceUpdate(t *testing.T) {
 	if err != nil || values["TOKEN"] != "first" {
 		t.Fatalf("last good read: %v %v", values, err)
 	}
-	write(`{"TOKEN":"second"}`)
+	write(`{"TOKEN":{"kind":"plain","value":"second"}}`)
 	values, err = ReadConfig()
 	if err != nil || values["TOKEN"] != "second" || len(values) != 1 {
 		t.Fatalf("updated read: %v %v", values, err)
@@ -46,7 +46,7 @@ func TestReadConfigInPlaceUpdate(t *testing.T) {
 func TestReadConfigDoesNotReuseAnotherFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("FUNCTION_CONFIG_FILE", path)
-	if err := os.WriteFile(path, []byte(`{"TOKEN":"first"}`), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"TOKEN":{"kind":"plain","value":"first"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ReadConfig(); err != nil {
@@ -65,7 +65,7 @@ func TestReadConfigDoesNotReuseAnotherFile(t *testing.T) {
 func TestReadConfigConcurrentCallersOwnTheirMaps(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("FUNCTION_CONFIG_FILE", path)
-	if err := os.WriteFile(path, []byte(`{"MODE":"ready"}`), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"MODE":{"kind":"plain","value":"ready"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var workers sync.WaitGroup
@@ -87,7 +87,7 @@ func TestReadConfigConcurrentCallersOwnTheirMaps(t *testing.T) {
 func TestConfigGet(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("FUNCTION_CONFIG_FILE", path)
-	if err := os.WriteFile(path, []byte(`{"MESSAGE":"hello","EMPTY":""}`), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"MESSAGE":{"kind":"plain","value":"hello"},"EMPTY":{"kind":"plain","value":""}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	params, err := ReadConfig()

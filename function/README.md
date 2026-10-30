@@ -48,7 +48,7 @@ exposed HTTP server.
 declaration. Consumer tests check the implementation against it; cross-component
 acceptance checks its bytes against the contracts artifact and reads actual
 Gateway/App request bytes with this public SDK. The declaration has no runtime
-network or private module dependency. The Function helpers are available in the `v1.1.0-function.2` prerelease.
+network or private module dependency.
 Full environment acceptance is tracked separately from package tests. The shared
 declaration source is recorded below.
 
@@ -59,3 +59,22 @@ The exact local `caller-context.json` declaration comes from contracts
 Its SHA-256 is `5a9fd83ce058e75a3ccdf5377e9f6559376db7cf3a4170fbbb4c3941769968f4`.
 This identifies the shared header names; it does not replace the provenance of
 other protocols or imply full environment acceptance.
+
+## Asynchronous jobs
+
+Call `job, err := function.StartJob(jobID)` before starting a background goroutine.
+After successful registration, call `job.Finish()` when work ends and handle its error.
+A registered job blocks automatic idle sleep. Starting an active ID is idempotent;
+finishing an absent or finished ID succeeds. Starting that ID after Finish registers
+a new job. Finish can be retried. Registrations are local to one execution and reset
+on restart. Force sleep, resource limits and failures may still interrupt work;
+store recoverable progress externally.
+
+## Parameter files
+
+Local files use `{"MESSAGE":{"kind":"plain","value":"Hello"}}`; set
+`FUNCTION_CONFIG_FILE` to the path. Plain entries do not require a secret key.
+The platform may supply `encoded` entries and `FUNCTION_CONFIG_SECRET_KEY`.
+The SDK authenticates and decrypts these entries before returning plaintext Config.
+An invalid key, ciphertext or entry kind returns an error even if an earlier read
+succeeded. Only a fully decoded configuration replaces the cached result.
