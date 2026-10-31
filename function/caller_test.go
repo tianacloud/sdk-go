@@ -43,7 +43,7 @@ func TestCallerFromGatewayRequests(t *testing.T) {
 		if strings.Contains(path, "user-b") {
 			suffix = "b"
 		}
-		if !ok || caller != (Caller{UserID: "user-" + suffix, TenantID: "selected-" + suffix}) {
+		if !ok || caller != (Caller{UserID: "user-" + suffix, TenantID: "selected-" + suffix, AppOwnerID: "user-a"}) || caller.IsAppOwner() != (suffix == "a") {
 			t.Fatal("Gateway and SDK request identities differ")
 		}
 	}
@@ -96,7 +96,38 @@ func TestCallerHTTPDeclaration(t *testing.T) {
 	if err := json.Unmarshal(raw, &declaration); err != nil {
 		t.Fatal(err)
 	}
-	if declaration["user_id_header"] != callerUserHeader || declaration["tenant_id_header"] != callerTenantHeader {
+	if declaration["user_id_header"] != callerUserHeader || declaration["tenant_id_header"] != callerTenantHeader || declaration["app_owner_id_header"] != callerAppOwnerHeader {
 		t.Fatal("HTTP consumer differs from shared declaration")
+	}
+}
+
+func TestCallerIsAppOwner(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		owners       []string
+		valid, owner bool
+	}{
+		{"creator", []string{"user-1"}, true, true},
+		{"another creator", []string{"user-2"}, true, false},
+		{"no Web", nil, true, false},
+		{"empty owner", []string{""}, false, false},
+		{"duplicate", []string{"user-1", "user-2"}, false, false},
+		{"invalid owner", []string{"user\r\nother: value"}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/", nil)
+			r.Header.Set(callerUserHeader, "user-1")
+			r.Header.Set(callerTenantHeader, "tenant-1")
+			if tc.owners != nil {
+				r.Header["TIANA-CALLER-APP-OWNER-ID"] = tc.owners
+			}
+			caller, ok := CallerFromRequest(r)
+			if ok != tc.valid || caller.IsAppOwner() != tc.owner {
+				t.Fatal("unexpected Web creator identity")
+			}
+		})
+	}
+	if (Caller{}).IsAppOwner() {
+		t.Fatal("empty caller is not a creator")
 	}
 }

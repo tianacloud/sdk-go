@@ -44,6 +44,13 @@ request and keeps no global user state. It consumes the managed Gateway's
 authorization result; it is not an authentication method for an independently
 exposed HTTP server.
 
+For calls originating from a Web App, `caller.AppOwnerID` identifies that Web's
+creator. Use `caller.IsAppOwner()` for author-only initialization or permission
+management. It compares the current user with the source Web creator and returns
+false without a Web context. Different Web Apps may use the same Function with
+different creators. Tenant roles and the Function or Token creator are separate
+from this request-level identity.
+
 `caller-context.json` is the local copy of the minimal shared HTTP name
 declaration. Consumer tests check the implementation against it; cross-component
 acceptance checks its bytes against the contracts artifact and reads actual
@@ -55,8 +62,8 @@ declaration source is recorded below.
 ## Shared declaration provenance
 
 The exact local `caller-context.json` declaration comes from contracts
-`v0.82.0-function.1`, commit `7f7dfa4764ffa0318b264bfcd6acf3810005287e`.
-Its SHA-256 is `5a9fd83ce058e75a3ccdf5377e9f6559376db7cf3a4170fbbb4c3941769968f4`.
+`v0.82.0-function.4`, commit `eb0373d0c845fd6dff7ed59a5ea0723ffe6ba3b4`.
+Its SHA-256 is `9afd1c6e668ef8c506389d1fd1f486f90240f8e818b3342f9c4e2a41d55206e3`.
 This identifies the shared header names; it does not replace the provenance of
 other protocols or imply full environment acceptance.
 
