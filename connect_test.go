@@ -399,7 +399,7 @@ func TestRemoteHalfClosePreservesWrite(t *testing.T) {
 				body.Write(f.Data())
 				if f.StreamEnded() {
 					got <- body.String()
-					return
+					// Keep the session open while the client completes its half-close.
 				}
 			}
 		}
