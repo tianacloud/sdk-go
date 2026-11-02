@@ -32,16 +32,16 @@ func (e *Error) Error() string { return fmt.Sprintf("vault: HTTP %d (%s)", e.Sta
 
 type Entry struct {
 	Key     string `json:"key"`
-	Version uint64 `json:"version"`
+	Version uint64 `json:"version,string"`
 }
 type Secret struct {
 	Key     string `json:"key"`
 	Value   string `json:"value"`
-	Version uint64 `json:"version"`
+	Version uint64 `json:"version,string"`
 }
 type SetResult struct {
 	Key     string `json:"key"`
-	Version uint64 `json:"version"`
+	Version uint64 `json:"version,string"`
 	Changed bool   `json:"changed"`
 }
 type Page struct {

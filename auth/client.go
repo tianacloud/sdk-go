@@ -698,8 +698,12 @@ func (c *Client) doJSONWithHeadersStatus(ctx context.Context, method, path strin
 	requestURL := *c.origin
 	basePath := strings.TrimRight(requestURL.Path, "/")
 	requestPath, rawQuery, _ := strings.Cut(path, "?")
-	requestURL.Path = basePath + requestPath
-	requestURL.RawPath = ""
+	decodedPath, err := url.PathUnescape(requestPath)
+	if err != nil {
+		return 0, errors.New("invalid MGR request path")
+	}
+	requestURL.RawPath = strings.TrimRight(c.origin.EscapedPath(), "/") + requestPath
+	requestURL.Path = basePath + decodedPath
 	requestURL.RawQuery = rawQuery
 	request, err := http.NewRequestWithContext(ctx, method, requestURL.String(), body)
 	if err != nil {
