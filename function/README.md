@@ -7,23 +7,28 @@ parameters, err := function.ReadConfig()
 if err != nil {
     return err
 }
-endpoint, ok := parameters.Get("SQLITE_ENDPOINT")
-if !ok {
-    return errors.New("SQLITE_ENDPOINT is not configured")
+endpoint, err := parameters.Get("SQLITE_ENDPOINT")
+if err != nil {
+    return err
 }
-token, ok := parameters.Get("SQLITE_TOKEN")
-if !ok {
-    return errors.New("SQLITE_TOKEN is not configured")
+token, err := parameters.Get("SQLITE_TOKEN")
+if err != nil {
+    return err
 }
 ```
 
 The platform supplies `FUNCTION_CONFIG_FILE`, pointing to the function's read-only
-JSON parameter file. Each call reads the file, so a later call can observe saved
-parameter changes without restarting the function. During an incomplete update,
+JSON parameter file. Plain values can be updated in place. Changes to secret
+references take effect at the next cold start. During an incomplete file update,
 the last successfully decoded configuration is returned; a failed initial read
-returns an error. Each returned Config is independent. Get returns the value and its presence; an
-existing empty value returns true, while a missing key returns false. This helper reads parameters;
-changes are made in Console.
+returns an error. Each returned Config owns its typed definitions.
+
+Get returns `(value, error)`. `errors.Is(err, function.ErrNotExist)` identifies a
+missing parameter or target secret. An existing empty value returns `("", nil)`.
+Plain values are local; secret references are resolved by the execution supervisor,
+which accepts only parameter names declared as secret in this execution. The
+first successful value is cached for that execution. ReadConfig itself does not
+fetch secrets. Changes are made in Console.
 
 Inside an HTTP handler, read the authenticated caller for that request:
 
@@ -81,7 +86,7 @@ store recoverable progress externally.
 
 Local files use `{"MESSAGE":{"kind":"plain","value":"Hello"}}`; set
 `FUNCTION_CONFIG_FILE` to the path. Plain entries do not require a secret key.
-The platform may supply `encoded` entries and `FUNCTION_CONFIG_SECRET_KEY`.
-The SDK authenticates and decrypts these entries before returning plaintext Config.
-An invalid key, ciphertext or entry kind returns an error even if an earlier read
-succeeded. Only a fully decoded configuration replaces the cached result.
+A secret entry is `{"PASSWORD":{"kind":"secret","value":"production/password"}}`.
+Its value is a reference key, not secret plaintext. Get sends the parameter name
+`PASSWORD` to the supervisor's `/get_secret` endpoint. The SDK performs no local
+parameter encryption or decryption. Unsupported entry kinds return an error.
