@@ -121,7 +121,7 @@ older specification's keychain preference), not historical spec storage defaults
 
 Persistence originally retained uncoordinated RMW and refresh; the security
 hardening decision below supersedes that behavior. JSON/file paths remain
-compatible, but built-in reads now require private owned regular files and
+compatible, but built-in reads require regular files with platform permissions and
 writers participate in a shared persistent lock. No directory fsync guarantee
 is introduced. Performance for local reads remains O(file), bounded to 8 MiB.
 
@@ -169,10 +169,12 @@ recovery fields remain available without automatic printing. Reject unsafe
 browser verification URLs and bound/control-filter login labels. This does not
 claim arbitrary resource metadata is inherently non-secret.
 
-Built-in account and InstanceToken persistence uses the existing bounded
-NOFOLLOW/NONBLOCK reader, owned regular mode-0600 files, 8 MiB cap and private
-owned mode-0700 directory. Lock a persistent adjacent .lock inode via flock;
-validate owner, type, exact mode and single hardlink, never unlink on unlock.
+Built-in account and InstanceToken persistence uses bounded regular-file reads
+with an 8 MiB cap. Linux/macOS requires owned mode-0600 files and mode-0700
+directories. Windows uses normal process filesystem access and inherited permissions.
+Lock a persistent adjacent .lock file via flock on Unix or LockFileEx on Windows;
+validate regular-file type and single hardlink, plus ownership and mode on Unix.
+Keep lock files after unlock.
 Lock acquisition is cancellable and capped at 30 seconds. FileStore Save/Delete
 and token Save lock complete RMW. FileStore refresh locks reload → network
 rotation → save/delete; waiters recheck current credentials and reuse a newer
@@ -182,12 +184,13 @@ Logout shares this transaction; unlocked internal adapters prevent recursion.
 Tradeoffs: all origins in one file serialize during low-frequency refresh
 network I/O. Callers must supply network contexts/timeouts. Custom stores are
 serialized only per Client and still require caller-owned cross-client/process
-coordination. Built-in stores support Linux/macOS local flock filesystems;
-others fail closed. The same-user account/ancestor path is a trusted boundary;
+coordination. Built-in stores support local filesystems with flock on Linux/macOS
+and LockFileEx on Windows; other platforms fail closed. The same-user
+account/ancestor path is a trusted boundary;
 these locks cannot coordinate old binaries or hostile same-user writers.
 
 Compatibility/rollback: JSON/file names and CredentialStore methods remain;
-unsafe 0644/symlink files and remote HTTP are deliberately rejected. Persistent
+Unix 0644 files, symlinks and remote HTTP are deliberately rejected. Persistent
 .lock sidecars remain after use. Older writers ignore them and must never run
 concurrently. Directory fsync and distributed atomic refresh are not provided;
 a crash between server rotation and local persistence can require re-login.

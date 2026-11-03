@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"time"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -17,18 +16,13 @@ func openLock(path string) (windows.Handle, error) {
 	if err != nil {
 		return windows.InvalidHandle, err
 	}
-	sd, err := privateDescriptor()
+	// Deny deletion while open so all contenders keep the persistent file identity.
+	handle, err := windows.CreateFile(name, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_ALWAYS, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 	if err != nil {
 		return windows.InvalidHandle, err
 	}
-	attrs := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
-	// Deny deletion while open so all contenders keep the persistent file identity.
-	handle, err := windows.CreateFile(name, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &attrs, windows.OPEN_ALWAYS, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
-	if err != nil {
-		return windows.InvalidHandle, errors.New("cannot open private lock file")
-	}
 	info, err := fileInfo(handle, true)
-	if err != nil || info.NumberOfLinks != 1 || checkPrivate(handle) != nil {
+	if err != nil || info.NumberOfLinks != 1 {
 		windows.CloseHandle(handle)
 		return windows.InvalidHandle, errors.New("unsafe private lock file")
 	}

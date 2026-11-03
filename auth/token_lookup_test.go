@@ -86,14 +86,16 @@ func TestLookupTokenPrivateFileAndNoMutation(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("lookup rewrote store")
 	}
-	if err := chmodFixtureFile(path, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil {
-		t.Fatal("accepted public credential file")
-	}
-	if err := chmodFixtureFile(path, 0600); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS != "windows" {
+		if err := chmodFixtureFile(path, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil {
+			t.Fatal("accepted public credential file")
+		}
+		if err := chmodFixtureFile(path, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	link := path + ".link"
 	if err := os.Symlink(path, link); err != nil {
