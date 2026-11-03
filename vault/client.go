@@ -34,7 +34,7 @@ func (e *Error) Error() string {
 	if e.cause != nil {
 		return fmt.Sprintf("%v (request_id=%s)", e.cause, e.RequestID)
 	}
-	return fmt.Sprintf("vault: HTTP %d (%s)", e.Status, e.Code)
+	return fmt.Sprintf("vault: HTTP %d (%s) (request_id=%s)", e.Status, e.Code, e.RequestID)
 }
 func (e *Error) Unwrap() error { return e.cause }
 

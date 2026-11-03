@@ -1,14 +1,18 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -99,5 +103,40 @@ func TestFetchCancellationRetainsRequestIdentity(t *testing.T) {
 	var requestErr *Error
 	if !errors.As(err, &requestErr) || requestErr.RequestID != id || !errors.Is(err, context.Canceled) || !errors.Is(err, ErrTransport) {
 		t.Fatalf("cancel identity: %#v", err)
+	}
+}
+
+func TestFetchQuotaFailureKeepsCodeAndLoggedRequestID(t *testing.T) {
+	var requests atomic.Int32
+	ids := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := readRequestID(t, r)
+		if requests.Add(1) == 1 {
+			ids <- id
+		}
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `{"error":{"code":"QUOTA_EXCEEDED","message":"synthetic-detail-not-for-logs"}}`)
+	}))
+	defer server.Close()
+	client := &Client{origin: server.URL, http: server.Client()}
+	_, err := client.Do(t.Context(), Request{Method: "GET", PathQuery: "/"})
+	id := <-ids
+	var requestErr *Error
+	if !errors.As(err, &requestErr) || requestErr.Status != http.StatusForbidden || requestErr.RequestID != id || id == "" {
+		t.Fatalf("quota error identity: %#v", err)
+	}
+	if requestErr.Code != "QUOTA_EXCEEDED" {
+		t.Errorf("quota code: %q", requestErr.Code)
+	}
+	var output bytes.Buffer
+	log.New(&output, "", 0).Print(err)
+	if !strings.Contains(output.String(), "request_id="+id) || !strings.Contains(output.String(), "QUOTA_EXCEEDED") {
+		t.Errorf("quota diagnostic log: %q", output.String())
+	}
+	if strings.Contains(output.String(), "synthetic-detail-not-for-logs") {
+		t.Errorf("response detail appeared in log: %q", output.String())
+	}
+	if requests.Load() != 1 {
+		t.Errorf("quota request was replayed: %d requests", requests.Load())
 	}
 }

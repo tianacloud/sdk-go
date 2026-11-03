@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
@@ -8,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/tianacloud/sdk-go/fetch"
@@ -21,6 +24,7 @@ func TestVaultErrorsKeepRequestIDAndBusinessMeaning(t *testing.T) {
 		body   string
 		want   error
 	}{
+		{403, `{"error":{"code":"INVALID_SIGNATURE"}}`, nil},
 		{404, `{"error":{"code":"NOT_FOUND"}}`, ErrNotExist},
 		{504, `{"error":{"code":"RESULT_UNKNOWN"}}`, ErrResultUnknown},
 		{503, `{"error":{"code":"BUSY"}}`, nil},
@@ -85,6 +89,14 @@ func TestVaultErrorsKeepRequestIDAndBusinessMeaning(t *testing.T) {
 			}
 			if tc.want != nil && !errors.Is(err, tc.want) {
 				t.Fatalf("business meaning: %v", err)
+			}
+			var output bytes.Buffer
+			log.New(&output, "", 0).Print(err)
+			if !strings.Contains(output.String(), "request_id="+id) {
+				t.Errorf("Vault diagnostic log: %q", output.String())
+			}
+			if tc.status == 403 && requestErr.Code != "INVALID_SIGNATURE" {
+				t.Fatalf("error code: %#v", requestErr)
 			}
 			if tc.status == 503 && requestErr.Code != "BUSY" {
 				t.Fatalf("error code: %#v", requestErr)

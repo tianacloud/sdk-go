@@ -86,7 +86,7 @@ func (e *Error) Error() string {
 	if e.cause != nil {
 		return fmt.Sprintf("%v (request_id=%s)", e.cause, e.RequestID)
 	}
-	return fmt.Sprintf("gateway fetch failed: status %d (%s)", e.Status, e.Code)
+	return fmt.Sprintf("gateway fetch failed: status %d (%s) (request_id=%s)", e.Status, e.Code, e.RequestID)
 }
 func (e *Error) Unwrap() error { return e.cause }
 
@@ -234,7 +234,7 @@ func (c *Client) Do(ctx context.Context, r Request) (response *Response, err err
 		_ = json.NewDecoder(io.LimitReader(res.Body, MaxMetadata)).Decode(&envelope)
 		code := "FETCH_FAILED"
 		switch envelope.Error.Code {
-		case "ACTIVATION_RESOURCE_PRESSURE", "ACTIVATION_NO_IDLE_POD", "ACTIVATION_CAPACITY_UNAVAILABLE":
+		case "QUOTA_EXCEEDED", "ACTIVATION_RESOURCE_PRESSURE", "ACTIVATION_NO_IDLE_POD", "ACTIVATION_CAPACITY_UNAVAILABLE":
 			code = envelope.Error.Code
 		}
 		if strings.HasPrefix(envelope.Error.Code, "FETCH_") && validID(envelope.Error.Code) {
