@@ -67,10 +67,12 @@ func main() {
  if err := os.Setenv("FUNCTION_CONFIG_FILE", path); err != nil { panic(err) }
  if err := os.WriteFile(path, []byte(`{"MODE":{"kind":"plain","value":"ready"}}`), 0600); err != nil { panic(err) }
  config, err := function.ReadConfig()
- if err != nil || config["MODE"] != "ready" { panic("parameter read failed") }
+ if err != nil { panic(err) }
+ if value, err := config.Get("MODE"); err != nil || value != "ready" { panic("parameter read failed") }
  if err := os.WriteFile(path, []byte(`{"MODE":`), 0600); err != nil { panic(err) }
  config, err = function.ReadConfig()
- if err != nil || config["MODE"] != "ready" { panic("last good parameters lost") }
+ if err != nil { panic(err) }
+ if value, err := config.Get("MODE"); err != nil || value != "ready" { panic("last good parameters lost") }
  request, _ := http.NewRequest("GET", "https://function.example.test/", nil)
  request.Header.Set("tiana-caller-user-id", "user-example")
  request.Header.Set("tiana-caller-tenant-id", "tenant-example")
