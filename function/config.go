@@ -2,6 +2,8 @@
 package function
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +36,12 @@ var configCache struct {
 // Get returns a plain value locally, or resolves a configured secret through
 // the execution supervisor. An existing empty value returns ("", nil).
 func (c Config) Get(key string) (string, error) {
+	return c.GetContext(context.Background(), key)
+}
+
+// GetContext resolves a parameter with caller cancellation. Use ContextFromRequest
+// to associate a secret lookup with an incoming HTTP request.
+func (c Config) GetContext(ctx context.Context, key string) (string, error) {
 	p, ok := c[key]
 	if !ok {
 		return "", ErrNotExist
@@ -42,22 +50,40 @@ func (c Config) Get(key string) (string, error) {
 	case "plain":
 		return p.Value, nil
 	case "secret":
-		response, err := jobClient.Get("http://supervisor.tiana.com:80/get_secret?key=" + url.QueryEscape(key))
+		identity, _ := ctx.Value(requestContextKey{}).(requestContext)
+		if identity.requestID == "" {
+			identity.requestID = rand.Text()
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://supervisor.tiana.com:80/get_secret?key="+url.QueryEscape(key), nil)
 		if err != nil {
-			return "", errors.New("function: secret request failed")
+			return "", &RequestError{RequestID: identity.requestID, cause: errors.New("function: secret request failed")}
+		}
+		request.Header.Set("x-request-id", identity.requestID)
+		if identity.traceparent != "" {
+			request.Header.Set("traceparent", identity.traceparent)
+		}
+		response, err := jobClient.Do(request)
+		if err != nil {
+			return "", &RequestError{RequestID: identity.requestID, cause: errors.Join(errors.New("function: secret request failed"), ctx.Err())}
 		}
 		defer response.Body.Close()
+		if id := response.Header.Get("x-request-id"); id != "" {
+			identity.requestID = id
+		}
+		failure := func(cause error) (string, error) {
+			return "", &RequestError{RequestID: identity.requestID, Status: response.StatusCode, cause: cause}
+		}
 		if response.StatusCode == http.StatusNotFound {
-			return "", ErrNotExist
+			return failure(ErrNotExist)
 		}
 		if response.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("function: secret request returned HTTP %d", response.StatusCode)
+			return failure(fmt.Errorf("function: secret request returned HTTP %d", response.StatusCode))
 		}
 		var result struct {
 			Value *string `json:"value"`
 		}
 		if json.NewDecoder(io.LimitReader(response.Body, 8*1024*1024)).Decode(&result) != nil || result.Value == nil {
-			return "", errors.New("function: invalid secret response")
+			return failure(errors.Join(errors.New("function: invalid secret response"), ctx.Err()))
 		}
 		return *result.Value, nil
 	default:

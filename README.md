@@ -22,6 +22,13 @@ failed handshakes. Callbacks may run concurrently; keep them brief. Callback
 panics do not change the connection result. The same identity is available in
 tunnel metadata and connection errors.
 
+Fetch responses expose `Response.RequestID`. Use `errors.As` with `*fetch.Error`
+for HTTP, transport, frame and response-body failures after a Fetch request has
+an identity. `errors.Is` retains transport/protocol and caller-cancellation
+semantics. Native `fetch.ResourceClient` errors retain the CONNECT request ID:
+connection failures use `*tiana.Error`, while HTTP and body failures use
+`*fetch.Error`. Report the request ID with the failure time for investigation.
+
 `auth.WithRequestID(ctx, id)` carries an existing logical request identity into
 MGR calls, including their diagnostic callbacks and errors. Use a separate
 context for each concurrent request. Calls without an inherited ID generate one.

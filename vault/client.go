@@ -24,11 +24,19 @@ var ErrNotExist = errors.New("vault: secret does not exist")
 var ErrResultUnknown = errors.New("vault: request outcome may be unknown")
 
 type Error struct {
-	Status int
-	Code   string
+	Status    int
+	Code      string
+	RequestID string
+	cause     error
 }
 
-func (e *Error) Error() string { return fmt.Sprintf("vault: HTTP %d (%s)", e.Status, e.Code) }
+func (e *Error) Error() string {
+	if e.cause != nil {
+		return fmt.Sprintf("%v (request_id=%s)", e.cause, e.RequestID)
+	}
+	return fmt.Sprintf("vault: HTTP %d (%s)", e.Status, e.Code)
+}
+func (e *Error) Unwrap() error { return e.cause }
 
 type Entry struct {
 	Key     string `json:"key"`
@@ -122,12 +130,20 @@ func (c *Client) List(ctx context.Context, keyword, after string, pageSize int) 
 	err := c.call(ctx, "GET", "/secrets?"+query.Encode(), nil, nil, &result)
 	return result, err
 }
-func (c *Client) call(ctx context.Context, method, path string, body []byte, headers []fetch.Header, result any) error {
+func (c *Client) call(ctx context.Context, method, path string, body []byte, headers []fetch.Header, result any) (err error) {
 	response, err := c.transport.Do(ctx, fetch.Request{Method: method, PathQuery: path, Headers: headers, Body: bytes.NewReader(body), BodyLength: int64(len(body))})
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
+	defer func() {
+		if err != nil {
+			var requestErr *Error
+			if !errors.As(err, &requestErr) {
+				err = &Error{Status: response.Status, RequestID: response.RequestID, cause: err}
+			}
+		}
+	}()
 	if response.Status == http.StatusNotFound {
 		return ErrNotExist
 	}
@@ -141,14 +157,14 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, hea
 			} `json:"error"`
 		}
 		_ = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&failure)
-		return &Error{Status: response.Status, Code: failure.Error.Code}
+		return &Error{Status: response.Status, Code: failure.Error.Code, RequestID: response.RequestID}
 	}
 	if result == nil {
 		_, err = io.Copy(io.Discard, response.Body)
 		return err
 	}
 	if err = json.NewDecoder(io.LimitReader(response.Body, fetch.MaxBody)).Decode(result); err != nil {
-		return ErrResultUnknown
+		return errors.Join(ErrResultUnknown, ctx.Err())
 	}
 	return nil
 }

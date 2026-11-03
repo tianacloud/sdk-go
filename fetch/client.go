@@ -79,11 +79,16 @@ type Response struct {
 type Error struct {
 	Status          int
 	Code, RequestID string
+	cause           error
 }
 
 func (e *Error) Error() string {
+	if e.cause != nil {
+		return fmt.Sprintf("%v (request_id=%s)", e.cause, e.RequestID)
+	}
 	return fmt.Sprintf("gateway fetch failed: status %d (%s)", e.Status, e.Code)
 }
+func (e *Error) Unwrap() error { return e.cause }
 
 func NewClient(c Config) (*Client, error) {
 	host, err := tiana.ParseEndpoint(c.Endpoint)
@@ -145,7 +150,7 @@ func NewClient(c Config) (*Client, error) {
 	return &Client{origin: "https://" + authority, token: c.Token, transport: transport, http: &http.Client{Transport: transport, Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (c *Client) Close() { c.transport.CloseIdleConnections() }
-func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
+func (c *Client) Do(ctx context.Context, r Request) (response *Response, err error) {
 	if r.BodyLength < 0 || r.BodyLength > MaxBody || r.BodyLength > 0 && r.Body == nil {
 		return nil, ErrProtocol
 	}
@@ -177,6 +182,14 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 			return nil, ErrProtocol
 		}
 	}
+	defer func() {
+		if err != nil {
+			var requestErr *Error
+			if !errors.As(err, &requestErr) {
+				err = &Error{RequestID: r.RequestID, cause: errors.Join(err, ctx.Err())}
+			}
+		}
+	}()
 	if r.Headers == nil {
 		r.Headers = []Header{}
 	}
@@ -227,7 +240,7 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 		if strings.HasPrefix(envelope.Error.Code, "FETCH_") && validID(envelope.Error.Code) {
 			code = envelope.Error.Code
 		}
-		return nil, &Error{res.StatusCode, code, r.RequestID}
+		return nil, &Error{Status: res.StatusCode, Code: code, RequestID: r.RequestID}
 	}
 	fail := func() (*Response, error) { res.Body.Close(); return nil, ErrProtocol }
 	if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Type") != mediaType || res.Header.Get("Content-Encoding") != "" && res.Header.Get("Content-Encoding") != "identity" {
@@ -283,7 +296,7 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 			return fail()
 		}
 	}
-	responseBody := &boundedBody{body: res.Body, remaining: meta.BodyLength}
+	responseBody := &boundedBody{body: res.Body, remaining: meta.BodyLength, requestID: r.RequestID}
 	if r.Method == "HEAD" || meta.Status == 204 || meta.Status == 205 || meta.Status == 304 {
 		var probe [1]byte
 		if n, err := responseBody.Read(probe[:]); n != 0 || err != io.EOF {
@@ -342,13 +355,19 @@ func validHeader(h Header) bool {
 
 type boundedBody struct {
 	body      io.ReadCloser
+	requestID string
 	remaining *int64
 	count     int64
 	done      bool
 }
 
 func (b *boundedBody) Close() error { return b.body.Close() }
-func (b *boundedBody) Read(p []byte) (int, error) {
+func (b *boundedBody) Read(p []byte) (n int, err error) {
+	defer func() {
+		if err != nil && err != io.EOF && b.requestID != "" {
+			err = &Error{RequestID: b.requestID, cause: err}
+		}
+	}()
 	if b.done {
 		return 0, io.EOF
 	}

@@ -76,32 +76,33 @@ func (c *ResourceClient) Do(ctx context.Context, r Request) (*Response, error) {
 		return nil, err
 	}
 	fail := func() { stream.Close(); cancel() }
+	failure := func(cause error) (*Response, error) {
+		err := &Error{RequestID: stream.Metadata().RequestID, cause: errors.Join(cause, ctx.Err())}
+		fail()
+		return nil, err
+	}
 	// The stream context and deadline cover request, headers and body. Exactly
 	// one native request is sent per stream, with no transport retry mechanism.
 	if deadline, ok := ctx.Deadline(); ok {
 		if err = stream.SetDeadline(deadline); err != nil {
-			fail()
-			return nil, ErrTransport
+			return failure(ErrTransport)
 		}
 	}
 	if err = req.Write(stream); err != nil {
-		fail()
-		return nil, ErrTransport
+		return failure(ErrTransport)
 	}
 	reader := &budgetReader{source: stream, left: MaxMetadata}
 	buffered := bufio.NewReaderSize(reader, 4096)
 	reply, err := http.ReadResponse(buffered, req)
 	if err != nil {
-		fail()
-		return nil, ErrProtocol
+		return failure(ErrProtocol)
 	}
 	if reply.ContentLength > MaxBody || reply.StatusCode < 200 {
 		reply.Body.Close()
-		fail()
-		return nil, ErrProtocol
+		return failure(ErrProtocol)
 	}
 	reader.left = MaxBody + MaxMetadata // Includes buffered body and chunk framing.
-	return &Response{Status: reply.StatusCode, Header: reply.Header, RequestID: stream.Metadata().RequestID, Body: &resourceBody{body: reply.Body, stream: stream, cancel: cancel, left: MaxBody}}, nil
+	return &Response{Status: reply.StatusCode, Header: reply.Header, RequestID: stream.Metadata().RequestID, Body: &resourceBody{body: reply.Body, stream: stream, cancel: cancel, left: MaxBody, requestID: stream.Metadata().RequestID}}, nil
 }
 
 type budgetReader struct {
@@ -122,20 +123,26 @@ func (b *budgetReader) Read(p []byte) (int, error) {
 }
 
 type resourceBody struct {
-	body   io.ReadCloser
-	stream io.Closer
-	cancel context.CancelFunc
-	left   int64
+	body      io.ReadCloser
+	stream    io.Closer
+	cancel    context.CancelFunc
+	left      int64
+	requestID string
 }
 
-func (b *resourceBody) Read(p []byte) (int, error) {
+func (b *resourceBody) Read(p []byte) (n int, err error) {
+	defer func() {
+		if err != nil && err != io.EOF && b.requestID != "" {
+			err = &Error{RequestID: b.requestID, cause: err}
+		}
+	}()
 	if len(p) == 0 {
 		return 0, nil
 	}
 	if int64(len(p)) > b.left+1 {
 		p = p[:b.left+1]
 	}
-	n, err := b.body.Read(p)
+	n, err = b.body.Read(p)
 	if int64(n) > b.left {
 		b.Close()
 		return 0, ErrProtocol

@@ -12,9 +12,14 @@ signatures are returned without replaying the operation.
 `Set` preserves whitespace and empty values. A changed value increments the
 current version; an identical value keeps it. Only the current value is stored.
 `List` returns key/version metadata and a cursor, with optional literal substring
-search. `Remove` deletes the key. `ErrNotExist` distinguishes an absent key;
-`ErrResultUnknown` means the caller must independently check the result before
+search. `Remove` deletes the key. `errors.Is(err, vault.ErrNotExist)` distinguishes an absent key;
+`errors.Is(err, vault.ErrResultUnknown)` means the caller must independently check the result before
 choosing whether to issue another write.
+
+Use `errors.As` with `*vault.Error` to read the failing response's `RequestID`,
+`Status` and `Code`. Gateway transport and frame failures retain their identity
+in `*fetch.Error`. Request IDs identify evidence for the specific operation;
+they do not imply that a timed-out write was rolled back.
 
 The CLI uses MGR's Init/List/Set/Remove routes. It does not expose this client's
 Get method or a plaintext export command.

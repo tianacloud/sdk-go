@@ -74,6 +74,8 @@ func main() {
  if err != nil { panic(err) }
  if value, err := config.Get("MODE"); err != nil || value != "ready" { panic("last good parameters lost") }
  request, _ := http.NewRequest("GET", "https://function.example.test/", nil)
+ request.Header.Set("x-request-id", "consumer-request")
+ if value, err := config.GetContext(function.ContextFromRequest(request), "MODE"); err != nil || value != "ready" { panic("context parameter read failed") }
  request.Header.Set("tiana-caller-user-id", "user-example")
  request.Header.Set("tiana-caller-tenant-id", "tenant-example")
  caller, present := function.CallerFromRequest(request)

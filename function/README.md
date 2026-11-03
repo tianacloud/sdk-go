@@ -30,6 +30,35 @@ which accepts only parameter names declared as secret in this execution. The
 first successful value is cached for that execution. ReadConfig itself does not
 fetch secrets. Changes are made in Console.
 
+Use `GetContext` inside an HTTP handler to carry its cancellation and diagnostic
+identity to the supervisor:
+
+```go
+ctx := function.ContextFromRequest(r)
+token, err := parameters.GetContext(ctx, "SQLITE_TOKEN")
+if err != nil {
+    var requestErr *function.RequestError
+    if errors.As(err, &requestErr) {
+        log.Printf("secret request failed: request_id=%s status=%d", requestErr.RequestID, requestErr.Status)
+    }
+    return
+}
+_ = token
+```
+
+`ContextFromRequest` copies `x-request-id` and `traceparent` from that request;
+use a separate derived context for each concurrent incoming request. `GetContext`
+also accepts an ordinary `context.Context`. Without an inherited request ID, it
+generates an independent ID before sending the secret request. `Get` uses a
+background context and an independent ID; it does not imply a relationship to
+an HTTP handler. Plain parameters are still returned locally.
+
+`RequestError.RequestID` identifies failures even when no response arrives;
+`Status` is zero in that case. A response's `x-request-id` is retained when
+present. `errors.Is` still identifies `ErrNotExist`, `context.Canceled` and
+`context.DeadlineExceeded` from caller cancellation. Errors contain neither the
+secret value nor the supervisor response body. The SDK does not retry the lookup.
+
 Inside an HTTP handler, read the authenticated caller for that request:
 
 ```go
