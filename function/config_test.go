@@ -1,6 +1,7 @@
 package function
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -22,18 +23,18 @@ func TestReadConfigInPlaceUpdate(t *testing.T) {
 	}
 	write(`{"TOKEN":{"kind":"plain","value":"first"},"MODE":{"kind":"plain","value":"old"}}`)
 	values, err := ReadConfig()
-	if err != nil || values["TOKEN"] != "first" {
+	if err != nil || values["TOKEN"].Value != "first" {
 		t.Fatalf("initial read: %v %v", values, err)
 	}
-	values["TOKEN"] = "caller mutation"
+	values["TOKEN"] = Parameter{Kind: "plain", Value: "caller mutation"}
 	write(`{"TOKEN":`)
 	values, err = ReadConfig()
-	if err != nil || values["TOKEN"] != "first" {
+	if err != nil || values["TOKEN"].Value != "first" {
 		t.Fatalf("last good read: %v %v", values, err)
 	}
 	write(`{"TOKEN":{"kind":"plain","value":"second"}}`)
 	values, err = ReadConfig()
-	if err != nil || values["TOKEN"] != "second" || len(values) != 1 {
+	if err != nil || values["TOKEN"].Value != "second" || len(values) != 1 {
 		t.Fatalf("updated read: %v %v", values, err)
 	}
 	write(`{}`)
@@ -73,11 +74,11 @@ func TestReadConfigConcurrentCallersOwnTheirMaps(t *testing.T) {
 		workers.Go(func() {
 			for range 30 {
 				values, err := ReadConfig()
-				if err != nil || values["MODE"] != "ready" {
+				if err != nil || values["MODE"].Value != "ready" {
 					t.Errorf("read: %v %v", values, err)
 					return
 				}
-				values["MODE"] = "local"
+				values["MODE"] = Parameter{Kind: "plain", Value: "local"}
 			}
 		})
 	}
@@ -100,13 +101,13 @@ func TestConfigGet(t *testing.T) {
 	}{
 		{"MESSAGE", "hello", true}, {"EMPTY", "", true}, {"MISSING", "", false},
 	} {
-		value, ok := params.Get(tc.key)
-		if value != tc.value || ok != tc.present {
-			t.Errorf("Get(%q) = %q, %v", tc.key, value, ok)
+		value, err := params.Get(tc.key)
+		if value != tc.value || (err == nil) != tc.present || (!tc.present && !errors.Is(err, ErrNotExist)) {
+			t.Errorf("Get(%q) = %q, %v", tc.key, value, err)
 		}
 	}
 	var empty Config
-	if value, ok := empty.Get("MESSAGE"); value != "" || ok {
-		t.Fatalf("zero config: %q, %v", value, ok)
+	if value, err := empty.Get("MESSAGE"); value != "" || !errors.Is(err, ErrNotExist) {
+		t.Fatalf("zero config: %q, %v", value, err)
 	}
 }

@@ -2,42 +2,75 @@
 package function
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"maps"
+	"net/http"
+	"net/url"
 	"os"
 	"sync"
 )
 
+// ErrNotExist means the parameter or its referenced secret does not exist.
+var ErrNotExist = errors.New("function: parameter or secret does not exist")
+
+// Parameter is a plain value or a key in the user's secrets store.
+type Parameter struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// Config owns its typed definitions. Secret values are fetched only by Get.
+type Config map[string]Parameter
+
 var configCache struct {
 	sync.Mutex
 	path   string
-	values map[string]string
+	values Config
 }
 
-// Config contains the parameters read from the function's configuration file.
-type Config map[string]string
-
-// Get returns a parameter and whether it exists. An empty value can be present.
-func (c Config) Get(key string) (string, bool) {
-	value, ok := c[key]
-	return value, ok
+// Get returns a plain value locally, or resolves a configured secret through
+// the execution supervisor. An existing empty value returns ("", nil).
+func (c Config) Get(key string) (string, error) {
+	p, ok := c[key]
+	if !ok {
+		return "", ErrNotExist
+	}
+	switch p.Kind {
+	case "plain":
+		return p.Value, nil
+	case "secret":
+		response, err := jobClient.Get("http://supervisor.tiana.com:80/get_secret?key=" + url.QueryEscape(key))
+		if err != nil {
+			return "", errors.New("function: secret request failed")
+		}
+		defer response.Body.Close()
+		if response.StatusCode == http.StatusNotFound {
+			return "", ErrNotExist
+		}
+		if response.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("function: secret request returned HTTP %d", response.StatusCode)
+		}
+		var result struct {
+			Value *string `json:"value"`
+		}
+		if json.NewDecoder(io.LimitReader(response.Body, 8*1024*1024)).Decode(&result) != nil || result.Value == nil {
+			return "", errors.New("function: invalid secret response")
+		}
+		return *result.Value, nil
+	default:
+		return "", errors.New("function: unsupported parameter kind")
+	}
 }
 
-// ReadConfig reads the parameter file named by FUNCTION_CONFIG_FILE.
-// Each successful read refreshes the process-local cache. If a read fails while
-// the platform is updating the file in place, it returns the last successful
-// value. Before the first successful read, failures return an error. The returned
-// map is owned by the caller and can be modified without changing the cache.
-// Encoded parameters use FUNCTION_CONFIG_SECRET_KEY. Decryption and kind errors
-// are returned even if a previous configuration is cached.
+// ReadConfig reads FUNCTION_CONFIG_FILE without resolving secret references.
+// An incomplete in-place file update retains this file's last successful read.
+// Callers own the returned map. Semantic errors are returned directly.
 func ReadConfig() (Config, error) {
 	configCache.Lock()
 	defer configCache.Unlock()
-
 	path := os.Getenv("FUNCTION_CONFIG_FILE")
 	if path != configCache.path {
 		configCache.path = path
@@ -48,47 +81,21 @@ func ReadConfig() (Config, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err == nil {
-		var fields map[string]struct {
-			Kind  string `json:"kind"`
-			Value string `json:"value"`
-		}
-		err = json.Unmarshal(data, &fields)
-		if err == nil {
-			values := make(map[string]string, len(fields))
-			var decoder cipher.AEAD
-			for name, field := range fields {
-				switch field.Kind {
-				case "plain":
-					values[name] = field.Value
-				case "encoded":
-					if decoder == nil {
-						key, e := base64.StdEncoding.DecodeString(os.Getenv("FUNCTION_CONFIG_SECRET_KEY"))
-						if e != nil || len(key) != 32 {
-							return nil, errors.New("function: invalid parameter secret key")
-						}
-						block, _ := aes.NewCipher(key)
-						decoder, _ = cipher.NewGCM(block)
-					}
-					data, e := base64.StdEncoding.DecodeString(field.Value)
-					if e != nil || len(data) < decoder.NonceSize()+decoder.Overhead() {
-						return nil, errors.New("function: invalid encoded parameter")
-					}
-					plaintext, e := decoder.Open(nil, data[:decoder.NonceSize()], data[decoder.NonceSize():], nil)
-					if e != nil {
-						return nil, errors.New("function: cannot decrypt parameter")
-					}
-					values[name] = string(plaintext)
-				default:
+		var fields Config
+		if json.Unmarshal(data, &fields) == nil {
+			for _, field := range fields {
+				if field.Kind != "plain" && field.Kind != "secret" {
 					return nil, errors.New("function: unsupported parameter kind")
 				}
 			}
-			configCache.values = values
+			if fields == nil {
+				fields = Config{}
+			}
+			configCache.values = fields
 		}
 	}
 	if configCache.values != nil {
 		return maps.Clone(configCache.values), nil
 	}
-	// Configuration can contain credentials. Do not include file contents or
-	// decoder excerpts in errors returned to user code.
 	return nil, errors.New("function: cannot read parameter configuration")
 }
