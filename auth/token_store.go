@@ -104,7 +104,7 @@ func (s *FileInstanceTokenStore) readTokens() (instanceTokenFile, error) {
 		return instanceTokenFile{Tokens: map[string]InstanceTokenCredential{}}, nil
 	}
 	if err != nil {
-		return instanceTokenFile{}, errors.New("cannot read local InstanceTokens: require an owned, regular mode-0600 file, no symlinks, at most 8 MiB")
+		return instanceTokenFile{}, errors.New("cannot read local InstanceTokens: require a regular file, no symlinks, at most 8 MiB")
 	}
 	defer clear(data)
 	var file instanceTokenFile

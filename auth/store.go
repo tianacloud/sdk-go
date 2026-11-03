@@ -224,7 +224,7 @@ func readPrivateStore(path string) ([]byte, error) {
 		return nil, os.ErrNotExist
 	}
 	if err != nil {
-		return nil, errors.New("credential store requires an owned regular mode-0600 file, no symlinks, at most 8 MiB")
+		return nil, errors.New("credential store requires a regular file, no symlinks, at most 8 MiB")
 	}
 	return contents, nil
 }

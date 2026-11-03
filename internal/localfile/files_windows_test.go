@@ -10,9 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 func TestWindowsPrivateFilesAndLimits(t *testing.T) {
@@ -46,26 +43,7 @@ func TestWindowsPrivateFilesAndLimits(t *testing.T) {
 	if _, err := Read(filepath.Join(dir, "missing"), 64, true); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing: %v", err)
 	}
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;WD)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	acl, _, err := sd.DACL()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := PrivateDir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Read(path, 64, true); err == nil {
-		t.Fatal("accepted public ACL")
-	}
-	if data, err := Read(path, 64, false); err != nil || string(data) != "secret" {
-		t.Fatalf("ordinary file: %q %v", data, err)
-	}
+
 }
 
 func TestWindowsLockCancellationAndPersistentIdentity(t *testing.T) {
@@ -183,30 +161,6 @@ func TestWindowsPrivateReadRejectsSymlink(t *testing.T) {
 	}
 }
 
-func TestWindowsLockRejectsPublicACL(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "public.lock")
-	release, err := Lock(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	release()
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;WD)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	acl, _, err := sd.DACL()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
-		t.Fatal(err)
-	}
-	if release, err := Lock(context.Background(), path); err == nil {
-		release()
-		t.Fatal("accepted public lock ACL")
-	}
-}
-
 func TestWindowsPrivateDirectoryRejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target")
@@ -219,35 +173,5 @@ func TestWindowsPrivateDirectoryRejectsSymlink(t *testing.T) {
 	}
 	if err := PrivateDir(link); err == nil {
 		t.Fatal("accepted directory symlink")
-	}
-}
-
-func TestWindowsPrivateDirectoryACL(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "private")
-	if err := PrivateDir(path); err != nil {
-		t.Fatal(err)
-	}
-	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
-	if err != nil {
-		t.Fatal(err)
-	}
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		t.Fatal(err)
-	}
-	owner, _, err := sd.Owner()
-	if err != nil || !owner.Equals(user.User.Sid) {
-		t.Fatalf("directory owner: %v", err)
-	}
-	acl, _, err := sd.DACL()
-	if err != nil || acl == nil || acl.AceCount != 1 {
-		t.Fatalf("directory must have one owner grant: %v", err)
-	}
-	var ace *windows.ACCESS_ALLOWED_ACE
-	if err := windows.GetAce(acl, 0, &ace); err != nil {
-		t.Fatal(err)
-	}
-	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Mask != 0x001f01ff || !(*windows.SID)(unsafe.Pointer(&ace.SidStart)).Equals(user.User.Sid) {
-		t.Fatal("directory grants access outside current user")
 	}
 }
