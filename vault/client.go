@@ -66,8 +66,8 @@ func NewClient(transport *fetch.Client, instance, passphrase string) (*Client, e
 	var key []byte
 	if passphrase != "" {
 		var err error
-		key, err = base64.StdEncoding.DecodeString(passphrase)
-		if err != nil || len(key) != 32 {
+		key, err = base64.RawURLEncoding.DecodeString(passphrase)
+		if err != nil || len(key) != 16 {
 			return nil, errors.New("vault: invalid safety passphrase")
 		}
 	}
@@ -87,7 +87,7 @@ func signature(passphrase []byte, instance, key string, timestamp int64) string 
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 func (c *Client) Get(ctx context.Context, key string) (Secret, error) {
-	if len(c.passphrase) != 32 {
+	if len(c.passphrase) != 16 {
 		return Secret{}, errors.New("vault: Get requires a safety passphrase")
 	}
 	timestamp := time.Now().Unix()

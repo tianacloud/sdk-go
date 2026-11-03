@@ -4,7 +4,7 @@
 Configure its endpoint and token before calling `Get`, `Set`, `Remove` or `List`.
 Internal platform callers supply the Gateway internal `DialAddress`.
 
-`Get` additionally needs the base64 safety passphrase and instance ID. The client
+`Get` additionally needs the 22-character unpadded Base64URL safety passphrase (16 random bytes) and instance ID. The client
 signs the decoded key and Unix timestamp immediately before the request; the
 server accepts a time difference of at most 15 seconds. Errors and expired
 signatures are returned without replaying the operation.
