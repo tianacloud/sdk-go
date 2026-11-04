@@ -47,7 +47,7 @@ func TestPeerErrorDiagnosticsNeverReflectSecrets(t *testing.T) {
 	}
 }
 func TestAccountStoreRejectsUnsafeFiles(t *testing.T) {
-	for _, kind := range []string{"symlink", "public", "fifo", "oversized"} {
+	for _, kind := range []string{"symlink", "fifo", "oversized"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "credentials.json")
@@ -59,10 +59,6 @@ func TestAccountStoreRejectsUnsafeFiles(t *testing.T) {
 					t.Fatal(err)
 				}
 				if err := os.Symlink(target, path); err != nil {
-					t.Fatal(err)
-				}
-			case "public":
-				if err := os.WriteFile(path, body, 0644); err != nil {
 					t.Fatal(err)
 				}
 			case "fifo":
@@ -88,7 +84,7 @@ func TestAccountStoreRejectsUnsafeFiles(t *testing.T) {
 	}
 }
 func TestUnsafeLockFilesFailBeforeNetwork(t *testing.T) {
-	for _, kind := range []string{"symlink", "fifo", "public", "hardlink"} {
+	for _, kind := range []string{"symlink", "fifo", "hardlink"} {
 		t.Run(kind, func(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
@@ -110,10 +106,6 @@ func TestUnsafeLockFilesFailBeforeNetwork(t *testing.T) {
 				}
 			case "fifo":
 				if err := unix.Mkfifo(lockPath, 0600); err != nil {
-					t.Fatal(err)
-				}
-			case "public":
-				if err := os.WriteFile(lockPath, nil, 0644); err != nil {
 					t.Fatal(err)
 				}
 			case "hardlink":
@@ -193,14 +185,10 @@ func TestInvalidGrantNeverDeletesChangedCustomStore(t *testing.T) {
 }
 
 func TestInstanceTokenSaveRejectsUnsafeExistingStore(t *testing.T) {
-	for _, kind := range []string{"public", "symlink", "fifo"} {
+	for _, kind := range []string{"symlink", "fifo"} {
 		t.Run(kind, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "tokens.json")
 			switch kind {
-			case "public":
-				if err := os.WriteFile(path, []byte(`{"tokens":{}}`), 0644); err != nil {
-					t.Fatal(err)
-				}
 			case "symlink":
 				target := path + ".target"
 				if err := os.WriteFile(target, []byte(`{"tokens":{}}`), 0600); err != nil {

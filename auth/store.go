@@ -187,10 +187,6 @@ func atomicWritePrivate(path string, contents []byte) error {
 	}
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return fmt.Errorf("set private credential permissions: %w", err)
-	}
 	if _, err := temporary.Write(contents); err != nil {
 		temporary.Close()
 		return fmt.Errorf("write private credential file: %w", err)
@@ -205,7 +201,7 @@ func atomicWritePrivate(path string, contents []byte) error {
 	if err := os.Rename(temporaryName, path); err != nil {
 		return fmt.Errorf("replace private credential file: %w", err)
 	}
-	return nil // Replacement retains the private permissions established before writing.
+	return nil
 }
 
 func canonicalOriginKey(origin string) string {

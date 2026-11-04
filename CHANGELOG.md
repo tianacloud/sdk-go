@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1
+
+- Use actual filesystem access for Linux/macOS credential stores and locks,
+  including writable shared directories with a different owner.
+- Preserve quota error codes and request IDs in Function and Vault diagnostics.
+
 ## Unreleased
 
 - Add an explicit `outbound.Policy` for HTTP/HTTPS CONNECT and SOCKS5 TCP proxies,

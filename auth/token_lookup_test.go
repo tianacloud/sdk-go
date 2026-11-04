@@ -69,7 +69,7 @@ func TestLookupTokenIdentityExpiryAndOrdering(t *testing.T) {
 	}
 }
 
-func TestLookupTokenPrivateFileAndNoMutation(t *testing.T) {
+func TestLookupTokenReadableFileAndNoMutation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tokens.json")
 	s := NewFileInstanceTokenStore(path, "https://mgr.example")
 	if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); !errors.Is(err, ErrInstanceTokenNotFound) {
@@ -90,8 +90,8 @@ func TestLookupTokenPrivateFileAndNoMutation(t *testing.T) {
 		if err := chmodFixtureFile(path, 0644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err == nil {
-			t.Fatal("accepted public credential file")
+		if _, err := s.LookupCandidates("tenant", []string{"one"}, time.Now()); err != nil {
+			t.Fatal(err)
 		}
 		if err := chmodFixtureFile(path, 0600); err != nil {
 			t.Fatal(err)

@@ -41,9 +41,10 @@ bodies. A polling response that reports denied, expired or completed authorizati
 also retains its request ID; `errors.Is` still recognizes the corresponding
 authentication transaction error.
 
-MGR requires HTTPS except loopback development. Linux/macOS file stores use
-owned private file modes and `flock`; Windows uses normal process filesystem
-access, inherited permissions and `LockFileEx`. All three reject unsafe files and
+MGR requires HTTPS except loopback development. File stores use normal process filesystem
+access, with `flock` on Linux/macOS and `LockFileEx` on Windows.
+Unix creation requests mode 0600 files and 0700 directories; existing state
+uses filesystem-provided permissions. Windows uses inherited permissions. All three reject unsafe files and
 coordinate refresh/writes across processes with persistent locks on local filesystems. Custom stores require
 caller-owned cross-client coordination.
 

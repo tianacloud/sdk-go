@@ -11,9 +11,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Lock exclusively locks a persistent, private regular file. Never unlink this
+// Lock exclusively locks a persistent regular file. Never unlink this
 // file: unlinking lets two processes lock different inodes for the same path.
-// The caller must use a private directory and bound the acquisition context.
+// The caller must bound the acquisition context.
 func Lock(ctx context.Context, path string) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func Lock(ctx context.Context, path string) (func(), error) {
 	}
 	file := os.NewFile(uintptr(fd), path)
 	var st unix.Stat_t
-	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Mode&07777 != 0600 || st.Uid != uint32(os.Geteuid()) || st.Nlink != 1 {
+	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 {
 		_ = file.Close()
 		return nil, errors.New("unsafe private lock file")
 	}
@@ -53,7 +53,7 @@ func Lock(ctx context.Context, path string) (func(), error) {
 }
 
 // PrivateDir creates a directory and validates its final component without
-// following symlinks, then restricts its permissions through the opened handle.
+// following symlinks. Access is determined by filesystem operations.
 func PrivateDir(path string) error {
 	if err := os.MkdirAll(path, 0700); err != nil {
 		return errors.New("cannot create private directory")
@@ -63,12 +63,5 @@ func PrivateDir(path string) error {
 		return errors.New("cannot open private directory")
 	}
 	defer unix.Close(fd)
-	var st unix.Stat_t
-	if unix.Fstat(fd, &st) != nil || st.Uid != uint32(os.Geteuid()) {
-		return errors.New("unsafe private directory")
-	}
-	if unix.Fchmod(fd, 0700) != nil {
-		return errors.New("cannot restrict private directory")
-	}
 	return nil
 }

@@ -21,9 +21,10 @@
 // newest-record selection, and never falls back outside IDs returned by MGR.
 // It neither creates tokens nor retries a rejected Gateway connection.
 //
-// File stores on Linux/macOS require owned mode-0600 regular files and private
-// mode-0700 directories. Windows uses normal process filesystem access and
-// inherited permissions, checks disk-file handles and rejects final reparse points.
+// File stores use normal process filesystem access. Linux/macOS creation requests
+// mode-0600 files and mode-0700 directories; existing state uses filesystem-provided
+// permissions. Windows uses inherited permissions, checks disk-file handles and
+// rejects final reparse points.
 // Reads on all three platforms reject non-regular input and cap JSON at 8 MiB. Other
 // platforms fail closed; callers may supply a custom CredentialStore.
 // Writes create a same-directory temporary file, sync and rename it.

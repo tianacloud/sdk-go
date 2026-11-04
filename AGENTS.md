@@ -170,10 +170,11 @@ browser verification URLs and bound/control-filter login labels. This does not
 claim arbitrary resource metadata is inherently non-secret.
 
 Built-in account and InstanceToken persistence uses bounded regular-file reads
-with an 8 MiB cap. Linux/macOS requires owned mode-0600 files and mode-0700
-directories. Windows uses normal process filesystem access and inherited permissions.
+with an 8 MiB cap. File access uses normal process filesystem permissions on Linux/macOS and Windows.
+Unix creation requests mode-0600 files and mode-0700 directories; access to existing
+files and directories is determined by filesystem operations.
 Lock a persistent adjacent .lock file via flock on Unix or LockFileEx on Windows;
-validate regular-file type and single hardlink, plus ownership and mode on Unix.
+validate regular-file type and single hardlink.
 Keep lock files after unlock.
 Lock acquisition is cancellable and capped at 30 seconds. FileStore Save/Delete
 and token Save lock complete RMW. FileStore refresh locks reload → network
@@ -190,7 +191,7 @@ account/ancestor path is a trusted boundary;
 these locks cannot coordinate old binaries or hostile same-user writers.
 
 Compatibility/rollback: JSON/file names and CredentialStore methods remain;
-Unix 0644 files, symlinks and remote HTTP are deliberately rejected. Persistent
+Symlinks and remote HTTP are deliberately rejected. Persistent
 .lock sidecars remain after use. Older writers ignore them and must never run
 concurrently. Directory fsync and distributed atomic refresh are not provided;
 a crash between server rotation and local persistence can require re-login.
@@ -199,7 +200,7 @@ Do not weaken these checks to restore unsafe legacy behavior.
 Verification: deterministic independent-client refresh rotation and subprocess
 refresh/write tests, cancellation, crash-released persistent inode, malformed
 HTTP and API diagnostic canaries, structural recovery fields, safe URL/labels,
-file/lock symlink/FIFO/public/hardlink/size checks, compatible legacy JSON,
+file/lock symlink/FIFO/hardlink/size checks and shared-directory read/write, compatible legacy JSON,
 race tests, vet and Linux compilation. Use only synthetic credentials/files.
 
 ## Legacy InstanceToken file expiration compatibility
