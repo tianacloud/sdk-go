@@ -4,17 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/tianacloud/sdk-go/internal/functioncontext"
 )
 
-type requestContextKey struct{}
-type requestContext struct{ requestID, traceparent string }
-
 // ContextFromRequest preserves cancellation and the incoming request's diagnostic
-// identity for GetContext. It copies the header values, without retaining r.
+// identity for supervisor calls, including GetContext and file operations.
+// It copies the header values, without retaining r.
 func ContextFromRequest(r *http.Request) context.Context {
-	return context.WithValue(r.Context(), requestContextKey{}, requestContext{
-		requestID: r.Header.Get("x-request-id"), traceparent: r.Header.Get("traceparent"),
-	})
+	return functioncontext.FromRequest(r)
 }
 
 // RequestError identifies a failed supervisor secret request. Status is zero

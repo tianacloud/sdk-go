@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.0-rc.1
+
+- Add Function file clients for the resource owner's tenant root, an explicit
+  Web directory and the request's Gateway-injected Web identity. Support List,
+  Metadata, streamed GET/HEAD/Range, public file URLs, known-length PUT, Delete
+  and Capabilities, with typed uncertain-write errors and no automatic replay.
+
 ## v1.1.1
 
 - Use actual filesystem access for Linux/macOS credential stores and locks,

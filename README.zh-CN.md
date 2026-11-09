@@ -1,5 +1,7 @@
 # Tiana Go SDK
 
+函数内访问文件存储见 [Function files](docs/function-files.md)。使用 `function` 包构造客户端，平台提供存储配置。
+
 [English](README.md) | **简体中文**
 
 Tiana v1 CONNECT 的原生 Go 传输库，模块路径为

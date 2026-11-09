@@ -55,6 +55,9 @@ access/refresh tokens are separate from the InstanceTokens used by CONNECT.
 
 ## Installation
 
+For file access inside a Tiana Function, see [Function files](docs/function-files.md).
+The `function` package constructs clients without user-supplied storage credentials.
+
 After a release is published to this repository:
 
 ```sh

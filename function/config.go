@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"os"
 	"sync"
+
+	"github.com/tianacloud/sdk-go/internal/functioncontext"
 )
 
 // ErrNotExist means the parameter or its referenced secret does not exist.
@@ -50,28 +52,28 @@ func (c Config) GetContext(ctx context.Context, key string) (string, error) {
 	case "plain":
 		return p.Value, nil
 	case "secret":
-		identity, _ := ctx.Value(requestContextKey{}).(requestContext)
-		if identity.requestID == "" {
-			identity.requestID = rand.Text()
+		identity := functioncontext.FromContext(ctx)
+		if identity.RequestID == "" {
+			identity.RequestID = rand.Text()
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://supervisor.tiana.com:80/get_secret?key="+url.QueryEscape(key), nil)
 		if err != nil {
-			return "", &RequestError{RequestID: identity.requestID, cause: errors.New("function: secret request failed")}
+			return "", &RequestError{RequestID: identity.RequestID, cause: errors.New("function: secret request failed")}
 		}
-		request.Header.Set("x-request-id", identity.requestID)
-		if identity.traceparent != "" {
-			request.Header.Set("traceparent", identity.traceparent)
+		request.Header.Set("x-request-id", identity.RequestID)
+		if identity.Traceparent != "" {
+			request.Header.Set("traceparent", identity.Traceparent)
 		}
 		response, err := jobClient.Do(request)
 		if err != nil {
-			return "", &RequestError{RequestID: identity.requestID, cause: errors.Join(errors.New("function: secret request failed"), ctx.Err())}
+			return "", &RequestError{RequestID: identity.RequestID, cause: errors.Join(errors.New("function: secret request failed"), ctx.Err())}
 		}
 		defer response.Body.Close()
 		if id := response.Header.Get("x-request-id"); id != "" {
-			identity.requestID = id
+			identity.RequestID = id
 		}
 		failure := func(cause error) (string, error) {
-			return "", &RequestError{RequestID: identity.requestID, Status: response.StatusCode, cause: cause}
+			return "", &RequestError{RequestID: identity.RequestID, Status: response.StatusCode, cause: cause}
 		}
 		if response.StatusCode == http.StatusNotFound {
 			return failure(ErrNotExist)

@@ -9,6 +9,7 @@ const (
 	callerUserHeader     = "tiana-caller-user-id"
 	callerTenantHeader   = "tiana-caller-tenant-id"
 	callerAppOwnerHeader = "tiana-caller-app-owner-id"
+	callerWebHeader      = "tiana-caller-web-id"
 )
 
 // Caller identifies the authenticated user and the tenant selected in their
@@ -17,6 +18,7 @@ type Caller struct {
 	UserID     string
 	TenantID   string
 	AppOwnerID string
+	WebID      string
 }
 
 // IsAppOwner reports whether this caller created the source Web App.
@@ -35,7 +37,7 @@ func CallerFromRequest(request *http.Request) (Caller, bool) {
 		return Caller{}, false
 	}
 	var caller Caller
-	var users, tenants, owners int
+	var users, tenants, owners, webs int
 	for name, values := range request.Header {
 		switch {
 		case strings.EqualFold(name, callerUserHeader):
@@ -53,9 +55,14 @@ func CallerFromRequest(request *http.Request) (Caller, bool) {
 			if len(values) == 1 {
 				caller.AppOwnerID = values[0]
 			}
+		case strings.EqualFold(name, callerWebHeader):
+			webs += len(values)
+			if len(values) == 1 {
+				caller.WebID = values[0]
+			}
 		}
 	}
-	if users != 1 || tenants != 1 || owners > 1 || owners == 1 && !validCallerID(caller.AppOwnerID) || !validCallerID(caller.UserID) || !validCallerID(caller.TenantID) {
+	if users != 1 || tenants != 1 || owners > 1 || owners == 1 && !validCallerID(caller.AppOwnerID) || webs > 1 || webs == 1 && !validCallerID(caller.WebID) || !validCallerID(caller.UserID) || !validCallerID(caller.TenantID) {
 		return Caller{}, false
 	}
 	return caller, true

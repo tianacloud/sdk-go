@@ -60,6 +60,7 @@ import (
  "net/http"
  "os"
  "github.com/tianacloud/sdk-go/function"
+ "github.com/tianacloud/sdk-go/files"
 )
 
 func main() {
@@ -80,6 +81,11 @@ func main() {
  request.Header.Set("tiana-caller-tenant-id", "tenant-example")
  caller, present := function.CallerFromRequest(request)
  if !present || caller.UserID != "user-example" || caller.TenantID != "tenant-example" { panic("caller read failed") }
+ request.Header.Set("tiana-caller-web-id", "web-example")
+ var root *files.Client = function.Files()
+ web, err := function.FilesByWebApp("web-example")
+ if root == nil || web == nil || err != nil { panic("file client construction failed") }
+ if client, err := function.FilesFromRequest(request); err != nil || client == nil { panic("request file scope failed") }
  fmt.Println("Independent Function consumer: PASS")
 }
 GO

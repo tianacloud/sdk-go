@@ -1,5 +1,6 @@
 {
   "user_id_header": "tiana-caller-user-id",
   "tenant_id_header": "tiana-caller-tenant-id",
-  "app_owner_id_header": "tiana-caller-app-owner-id"
+  "app_owner_id_header": "tiana-caller-app-owner-id",
+  "web_id_header": "tiana-caller-web-id"
 }

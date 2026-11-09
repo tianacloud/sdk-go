@@ -1,0 +1,44 @@
+{
+  "origin": "http://supervisor.tiana.com:80",
+  "scope_query": "web_id",
+  "success_member": "data",
+  "error_member": "error",
+  "error_header": "x-tiana-file-error",
+  "write_id_header": "x-tiana-file-write-id",
+  "operations": {
+    "list": {"method": "GET", "path": "/files/list", "query": ["path", "cursor"], "status": 200, "result": "Page"},
+    "metadata": {"method": "GET", "path": "/files/metadata", "query": ["path"], "status": 200, "result": "Metadata"},
+    "get": {"method": "GET", "path": "/files/object", "query": ["path"], "headers": ["Range"], "status": [200, 206], "result": "stream"},
+    "head": {"method": "HEAD", "path": "/files/object", "query": ["path"], "status": 200, "result": "headers"},
+    "url": {"method": "GET", "path": "/files/url", "query": ["path"], "status": 200, "result": "URL"},
+    "put": {"method": "PUT", "path": "/files/object", "query": ["path", "overwrite", "write_id"], "headers": ["Content-Length", "Content-Type"], "body": "stream", "status": 201, "result": "PutReceipt"},
+    "delete": {"method": "DELETE", "path": "/files/object", "query": ["path"], "status": 204, "result": "empty"},
+    "capabilities": {"method": "GET", "path": "/files/capabilities", "status": 200, "result": "Capabilities"}
+  },
+  "results": {
+    "Page": {"entries": "Entry[]", "next_cursor": "string"},
+    "Entry": {"path": "string", "is_dir": "boolean", "size": "int64?", "etag": "string?", "last_modified": "RFC3339?"},
+    "Metadata": {"path": "string", "size": "int64", "etag": "string", "last_modified": "RFC3339", "content_type": "string", "write_id": "string"},
+    "URL": {"url": "string"},
+    "PutReceipt": {"path": "string", "size": "int64", "etag": "string", "write_id": "string"},
+    "Capabilities": {"max_file_bytes": "int64", "write_blocked": "boolean"}
+  },
+  "error": {
+    "code": "string", "message": "string", "stage": "string", "outcome": "string", "delete_confirmed": "boolean", "write_id": "string"
+  },
+  "errors": {
+    "FILE_INVALID_ARGUMENT": 400,
+    "FILE_LENGTH_REQUIRED": 411,
+    "FILE_TOO_LARGE": 413,
+    "FILE_WRITE_BLOCKED": 403,
+    "FILE_NOT_FOUND": 404,
+    "FILE_EXISTS": 409,
+    "FILE_UNSUPPORTED_OBJECT": 409,
+    "FILE_RANGE_NOT_SATISFIABLE": 416,
+    "FILE_NOT_CONFIGURED": 503,
+    "FILE_STORAGE_ERROR": 502,
+    "FILE_RESULT_UNKNOWN": 502
+  },
+  "stages": ["validate", "list", "metadata", "get", "url", "delete", "put", "capabilities"],
+  "outcomes": ["not_started", "failed", "unknown"]
+}

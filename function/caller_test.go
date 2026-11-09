@@ -43,7 +43,7 @@ func TestCallerFromGatewayRequests(t *testing.T) {
 		if strings.Contains(path, "user-b") {
 			suffix = "b"
 		}
-		if !ok || caller != (Caller{UserID: "user-" + suffix, TenantID: "selected-" + suffix, AppOwnerID: "user-a"}) || caller.IsAppOwner() != (suffix == "a") {
+		if !ok || caller != (Caller{UserID: "user-" + suffix, TenantID: "selected-" + suffix, AppOwnerID: "user-a", WebID: "web-" + suffix}) || caller.IsAppOwner() != (suffix == "a") {
 			t.Fatal("Gateway and SDK request identities differ")
 		}
 	}
@@ -96,7 +96,7 @@ func TestCallerHTTPDeclaration(t *testing.T) {
 	if err := json.Unmarshal(raw, &declaration); err != nil {
 		t.Fatal(err)
 	}
-	if declaration["user_id_header"] != callerUserHeader || declaration["tenant_id_header"] != callerTenantHeader || declaration["app_owner_id_header"] != callerAppOwnerHeader {
+	if declaration["user_id_header"] != callerUserHeader || declaration["tenant_id_header"] != callerTenantHeader || declaration["app_owner_id_header"] != callerAppOwnerHeader || declaration["web_id_header"] != callerWebHeader {
 		t.Fatal("HTTP consumer differs from shared declaration")
 	}
 }
@@ -129,5 +129,27 @@ func TestCallerIsAppOwner(t *testing.T) {
 	}
 	if (Caller{}).IsAppOwner() {
 		t.Fatal("empty caller is not a creator")
+	}
+}
+
+func TestCallerSourceWeb(t *testing.T) {
+	for _, web := range []string{"web-a", "web-b"} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set(callerUserHeader, "viewer")
+		r.Header.Set(callerTenantHeader, "viewer-tenant")
+		r.Header.Set(callerWebHeader, web)
+		caller, ok := CallerFromRequest(r)
+		if !ok || caller.WebID != web || caller.TenantID != "viewer-tenant" {
+			t.Fatal("source Web identity changed")
+		}
+		r.Header["TIANA-CALLER-WEB-ID"] = []string{"other-web"}
+		if _, ok := CallerFromRequest(r); ok {
+			t.Fatal("duplicate Web identity accepted")
+		}
+		delete(r.Header, "TIANA-CALLER-WEB-ID")
+		r.Header.Set(callerWebHeader, "../other")
+		if _, ok := CallerFromRequest(r); ok {
+			t.Fatal("invalid Web identity accepted")
+		}
 	}
 }

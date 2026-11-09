@@ -96,8 +96,8 @@ declaration source is recorded below.
 ## Shared declaration provenance
 
 The exact local `caller-context.json` declaration comes from contracts
-`v0.82.0-function.4`, commit `eb0373d0c845fd6dff7ed59a5ea0723ffe6ba3b4`.
-Its SHA-256 is `9afd1c6e668ef8c506389d1fd1f486f90240f8e818b3342f9c4e2a41d55206e3`.
+`v0.96.0-rc.1`, commit `45f98221922bfb4a725e692be5caffac579a781b`.
+Its SHA-256 is `79a10dfbc0a3d6bf722a5b18a57089899da5bdf6597a38b27d81b7b5ced3a86b`.
 This identifies the shared header names; it does not replace the provenance of
 other protocols or imply full environment acceptance.
 
