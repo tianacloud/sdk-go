@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tianacloud/sdk-go/gatewaydial"
 	"github.com/tianacloud/sdk-go/outbound"
 )
 
@@ -36,6 +37,9 @@ type Config struct {
 	MaxStreams      int
 	// Network explicitly supplies proxy routing. Nil preserves direct dialing.
 	Network *outbound.Policy
+	// Transport defaults to Standard. Compat directly dials the Endpoint and
+	// takes precedence over Network for this client's Gateway connections only.
+	Transport gatewaydial.Mode
 	// OnRequestID receives the connection identity before network I/O.
 	// Calls may be concurrent; keep the callback brief. Panics are ignored.
 	OnRequestID func(string)
@@ -60,6 +64,9 @@ type Client struct {
 func (*Client) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, "tiana.Client([REDACTED])") }
 
 func NewClient(cfg Config) (*Client, error) {
+	if !cfg.Transport.Valid() {
+		return nil, failure(Configuration, "invalid Gateway transport mode", false)
+	}
 	host, err := ParseEndpoint(cfg.Endpoint)
 	if err != nil {
 		return nil, err
@@ -214,7 +221,9 @@ func (c *Client) getSession(ctx context.Context) (*session, error) {
 	defer cancel()
 	var conn net.Conn
 	var err error
-	if c.cfg.Network == nil {
+	if c.cfg.Transport == gatewaydial.Compat {
+		conn, err = gatewaydial.DialCompat(dialCtx, c.cfg.Endpoint, c.cfg.DialAddress)
+	} else if c.cfg.Network == nil {
 		conn, err = (&net.Dialer{}).DialContext(dialCtx, "tcp", c.cfg.DialAddress)
 	} else {
 		conn, err = c.cfg.Network.DialTunnel(dialCtx, outbound.Target{URL: &url.URL{Scheme: "https", Host: net.JoinHostPort(c.cfg.Endpoint, c.cfg.Port)}, DialAddress: c.cfg.DialAddress})
@@ -228,6 +237,11 @@ func (c *Client) getSession(ctx context.Context) (*session, error) {
 		}
 		if errors.Is(err, context.Canceled) {
 			return nil, contextFailure(context.Canceled, false)
+		}
+		if c.cfg.Transport == gatewaydial.Compat {
+			result := failure(TCP, "compatibility transport establishment failed", false)
+			result.cause = err
+			return nil, result
 		}
 		var proxyError *outbound.Error
 		if errors.As(err, &proxyError) {

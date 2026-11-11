@@ -126,6 +126,17 @@ from the [`outbound` package](docs/outbound-proxies.md). The same field is
 available on `fetch.Config`, including native resource requests. A nil policy
 keeps direct dialing. SDK constructors never load proxy environment variables.
 
+For an Endpoint served by a Gateway with compatibility transport support, set
+`Transport: gatewaydial.Compat` (import `github.com/tianacloud/sdk-go/gatewaydial`).
+The zero value, `gatewaydial.Standard`, preserves the existing connection path.
+Compat connects directly to the same Endpoint address, performs the restricted
+SOCKS5 preface and then uses the original TLS and application protocol. It ignores
+`Network` for that Gateway connection. `DialAddress` and `Port` still select the
+physical destination; the preface uses the Endpoint hostname and logical port 443.
+The same option is available on `fetch.Config` and its resource client. There is
+no automatic mode switch or operation replay. This option does not configure a
+general-purpose proxy or change credentials and TLS verification.
+
 Omit `Token` for an Endpoint whose policy permits anonymous access. Supplied
 tokens are opaque credential strings. A token belongs to its Client;
 different credentials or trust roots use separate Clients. Formatting Token,

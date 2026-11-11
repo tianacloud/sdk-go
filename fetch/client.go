@@ -22,6 +22,7 @@ import (
 	"time"
 
 	tiana "github.com/tianacloud/sdk-go"
+	"github.com/tianacloud/sdk-go/gatewaydial"
 	"github.com/tianacloud/sdk-go/outbound"
 )
 
@@ -38,6 +39,9 @@ type Config struct {
 	Timeout                            time.Duration
 	// Network explicitly supplies proxy routing. Nil preserves direct dialing.
 	Network *outbound.Policy
+	// Transport defaults to Standard; Compat directly dials the Endpoint,
+	// taking precedence over Network while retaining verified target TLS.
+	Transport gatewaydial.Mode
 }
 
 func (Config) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, "fetch.Config([REDACTED])") }
@@ -91,6 +95,9 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.cause }
 
 func NewClient(c Config) (*Client, error) {
+	if !c.Transport.Valid() {
+		return nil, errors.New("invalid Gateway transport mode")
+	}
 	host, err := tiana.ParseEndpoint(c.Endpoint)
 	if err != nil {
 		return nil, errors.New("invalid fetch endpoint")
@@ -130,12 +137,26 @@ func NewClient(c Config) (*Client, error) {
 		}
 		authority = net.JoinHostPort(host, c.Port)
 	}
-	if c.Network != nil {
+	if c.Network != nil || c.Transport == gatewaydial.Compat {
 		transport.DialContext = nil
 		transport.DialTLSContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			setup, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			raw, err := c.Network.DialTunnel(setup, outbound.Target{URL: &url.URL{Scheme: "https", Host: authority}, DialAddress: c.DialAddress})
+			var raw net.Conn
+			var err error
+			if c.Transport == gatewaydial.Compat {
+				address := c.DialAddress
+				if address == "" {
+					port := c.Port
+					if port == "" {
+						port = "443"
+					}
+					address = net.JoinHostPort(host, port)
+				}
+				raw, err = gatewaydial.DialCompat(setup, host, address)
+			} else {
+				raw, err = c.Network.DialTunnel(setup, outbound.Target{URL: &url.URL{Scheme: "https", Host: authority}, DialAddress: c.DialAddress})
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -218,6 +239,10 @@ func (c *Client) Do(ctx context.Context, r Request) (response *Response, err err
 	}
 	res, e := c.http.Do(req)
 	if e != nil {
+		var compatError *gatewaydial.Error
+		if errors.As(e, &compatError) {
+			return nil, fmt.Errorf("%w: %w", ErrTransport, compatError)
+		}
 		var proxyError *outbound.Error
 		if errors.As(e, &proxyError) {
 			return nil, fmt.Errorf("%w: %w", ErrTransport, proxyError)
