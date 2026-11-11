@@ -81,7 +81,7 @@ type testListener struct {
 	count    atomic.Int32
 }
 
-func listenTest(t *testing.T, config *tls.Config, handle func(*tls.Conn), preface ...func(net.Conn) error) *testListener {
+func listenTest(t *testing.T, config *tls.Config, handle func(*tls.Conn)) *testListener {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -104,12 +104,6 @@ func listenTest(t *testing.T, config *tls.Config, handle func(*tls.Conn), prefac
 			go func() {
 				defer s.wg.Done()
 				defer conn.Close()
-				for _, accept := range preface {
-					if err := accept(conn); err != nil {
-						t.Error(err)
-						return
-					}
-				}
 				tlsConn := tls.Server(conn, config)
 				if tlsConn.Handshake() == nil {
 					handle(tlsConn)

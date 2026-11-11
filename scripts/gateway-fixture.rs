@@ -59,9 +59,6 @@ struct RuntimeService {
 }
 
 impl PublicConnectService for RuntimeService {
-    fn function_http_policy(&self, _: ResolvePolicyRequest) -> gateway_public::FunctionPolicyFuture<'_> {
-        Box::pin(async { Ok(None) })
-    }
     fn connect<'a>(
         &'a self,
         request: PublicRequest,
@@ -101,7 +98,6 @@ impl PublicConnectService for RuntimeService {
             let orchestration_request = OrchestrationRequest {
                 channel,
                 resolve: ResolvePolicyRequest {
-                    http_control: false,
                     request_id: request_id.clone(),
                     endpoint_id,
                 },
@@ -169,7 +165,6 @@ async fn runtime_service_for_agent(
 
     let policy = FakeControlAuthorization::default();
     let policy_response = EndpointAccess {
-        function_http: None,
         owners: None,
         endpoint_id: endpoint_id.clone(),
         instance_id: instance_id.clone(),
@@ -180,7 +175,6 @@ async fn runtime_service_for_agent(
             AuthMode::Disabled
         },
         token: authenticated.then_some(TokenResult {
-            caller: None,
             kind: 0,
             digest: synthetic_token().digest().unwrap().to_sha256_string(),
             owner_id: ENDPOINT.into(),
@@ -221,9 +215,6 @@ async fn runtime_service_for_agent(
 
 struct ErrorService(PublicServiceError);
 impl PublicConnectService for ErrorService {
-    fn function_http_policy(&self, _: ResolvePolicyRequest) -> gateway_public::FunctionPolicyFuture<'_> {
-        Box::pin(async { Err(self.0) })
-    }
     fn connect<'a>(
         &'a self,
         _: PublicRequest,

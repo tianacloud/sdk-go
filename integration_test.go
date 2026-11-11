@@ -17,20 +17,9 @@ import (
 	"time"
 
 	tiana "github.com/tianacloud/sdk-go"
-	"github.com/tianacloud/sdk-go/gatewaydial"
 )
 
 func TestGatewaySnapshot(t *testing.T) {
-	for _, mode := range []gatewaydial.Mode{gatewaydial.Standard, gatewaydial.Compat} {
-		name := "standard"
-		if mode == gatewaydial.Compat {
-			name = "compat"
-		}
-		t.Run(name, func(t *testing.T) { testGatewaySnapshot(t, mode) })
-	}
-}
-
-func testGatewaySnapshot(t *testing.T, mode gatewaydial.Mode) {
 	root := os.Getenv("TIANA_GATEWAY_FIXTURE")
 	if root == "" {
 		t.Fatal("TIANA_GATEWAY_FIXTURE must identify the isolated fixed Gateway fixture")
@@ -105,7 +94,7 @@ func testGatewaySnapshot(t *testing.T, mode gatewaydial.Mode) {
 			if tc.address == "" {
 				t.Fatal("missing fixture address")
 			}
-			c, err := tiana.NewClient(tiana.Config{Transport: mode, Endpoint: ready["endpoint"], DialAddress: tc.address, Token: tc.token, RootCAs: roots})
+			c, err := tiana.NewClient(tiana.Config{Endpoint: ready["endpoint"], DialAddress: tc.address, Token: tc.token, RootCAs: roots})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -157,7 +146,7 @@ func testGatewaySnapshot(t *testing.T, mode gatewaydial.Mode) {
 		})
 	}
 	t.Run("cancel_isolation", func(t *testing.T) {
-		c, err := tiana.NewClient(tiana.Config{Transport: mode, Endpoint: ready["endpoint"], DialAddress: ready["anonymous_address"], RootCAs: roots})
+		c, err := tiana.NewClient(tiana.Config{Endpoint: ready["endpoint"], DialAddress: ready["anonymous_address"], RootCAs: roots})
 		if err != nil {
 			t.Fatal(err)
 		}

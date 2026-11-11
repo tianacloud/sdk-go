@@ -6,24 +6,19 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/tianacloud/sdk-go/gatewaydial"
-	"github.com/tianacloud/sdk-go/internal/compattest"
 	"github.com/tianacloud/sdk-go/internal/proxytest"
 	"github.com/tianacloud/sdk-go/outbound"
 )
 
 func TestFetchPublicationAndStatusThroughProxy(t *testing.T) {
 	const endpoint = "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.db.example.test"
-	for _, kind := range []string{"http", "https", "socks5h", "compat", "compat-default-address"} {
+	for _, kind := range []string{"http", "https", "socks5h"} {
 		t.Run(kind, func(t *testing.T) {
 			calls := 0
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -65,17 +60,12 @@ func TestFetchPublicationAndStatusThroughProxy(t *testing.T) {
 			}
 			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
 			server.EnableHTTP2 = true
-			if strings.HasPrefix(kind, "compat") {
-				server.Listener = &compattest.Listener{Listener: server.Listener, Endpoint: endpoint}
-			}
 			server.StartTLS()
 			defer server.Close()
 			roots := x509.NewCertPool()
 			roots.AddCert(server.Certificate())
 			var peer *proxytest.Proxy
-			if strings.HasPrefix(kind, "compat") {
-				peer = &proxytest.Proxy{URL: "http://127.0.0.1:1"}
-			} else if kind == "socks5h" {
+			if kind == "socks5h" {
 				peer = proxytest.SOCKS(t, server.Listener.Addr().String(), false)
 			} else {
 				peer = proxytest.HTTP(t, server.Listener.Addr().String(), kind == "https")
@@ -84,19 +74,7 @@ func TestFetchPublicationAndStatusThroughProxy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			config := Config{Endpoint: endpoint, RootCAs: roots, Network: policy, Token: "opaque-tenant-credential"}
-			if strings.HasPrefix(kind, "compat") {
-				config.Endpoint = endpoint
-				config.Transport = gatewaydial.Compat
-				config.DialAddress = server.Listener.Addr().String()
-				config.Port = "9443"
-			}
-			if kind == "compat-default-address" {
-				compattest.ResolveLoopback(t, endpoint)
-				_, config.Port, _ = net.SplitHostPort(config.DialAddress)
-				config.DialAddress = ""
-			}
-			client, err := NewClient(config)
+			client, err := NewClient(Config{Endpoint: endpoint, RootCAs: roots, Network: policy, Token: "opaque-tenant-credential"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,55 +89,9 @@ func TestFetchPublicationAndStatusThroughProxy(t *testing.T) {
 				}
 				response.Body.Close()
 			}
-			if calls != 3 {
-				t.Fatalf("Fetch calls: %d", calls)
-			}
-			if !strings.HasPrefix(kind, "compat") && (len(peer.Requests()) != 1 || peer.Requests()[0].Address != endpoint+":443") {
+			if calls != 3 || len(peer.Requests()) != 1 || peer.Requests()[0].Address != endpoint+":443" {
 				t.Fatalf("fetch did not reuse the proxied connection: calls=%d dials=%d", calls, len(peer.Requests()))
 			}
 		})
-	}
-}
-
-func TestCompatFailurePreservesSafeEstablishmentStage(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		conn, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		conn.SetDeadline(time.Now().Add(time.Second))
-		var greeting [3]byte
-		if _, err := io.ReadFull(conn, greeting[:]); err == nil {
-			conn.Write([]byte{5, 255})
-		}
-	}()
-	client, err := NewClient(Config{Endpoint: "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.example.test", Transport: gatewaydial.Compat, DialAddress: listener.Addr().String(), Timeout: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	_, err = client.Do(context.Background(), Request{Method: "GET", PathQuery: "/probe"})
-	var stage *gatewaydial.Error
-	if !errors.Is(err, ErrTransport) || !errors.As(err, &stage) || strings.Contains(err.Error(), listener.Addr().String()) {
-		t.Fatalf("lost safe establishment stage: %v", err)
-	}
-	<-done
-}
-
-func TestInvalidTransportConfiguration(t *testing.T) {
-	config := Config{Endpoint: "ep-01j5c9m7q2v8x4k6n3r0t1w2yz.example.test", Transport: gatewaydial.Mode(255)}
-	if _, err := NewClient(config); err == nil {
-		t.Fatal("invalid Fetch transport accepted")
-	}
-	if _, err := NewResourceClient(config); err == nil {
-		t.Fatal("invalid native resource transport accepted")
 	}
 }

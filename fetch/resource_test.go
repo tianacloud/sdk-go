@@ -17,10 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tianacloud/sdk-go/gatewaydial"
 	"github.com/tianacloud/sdk-go/internal/proxytest"
 	"github.com/tianacloud/sdk-go/outbound"
-	"net/url"
 )
 
 func TestNativeResourceHTTPOverConnectPreservesEncodedBodyAndHead(t *testing.T) {
@@ -72,12 +70,12 @@ func TestNativeResourceHTTPOverConnectPreservesEncodedBodyAndHead(t *testing.T) 
 	defer server.Close()
 	roots := x509.NewCertPool()
 	roots.AddCert(cert)
-	for _, route := range []string{"direct", "http", "https", "socks5h", "compat"} {
+	for _, route := range []string{"direct", "http", "https", "socks5h"} {
 		t.Run(route, func(t *testing.T) {
 			config := Config{Endpoint: endpoint, DialAddress: server.Listener.Addr().String(), RootCAs: roots, Token: "tia_1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
 			if route != "direct" {
 				var peer *proxytest.Proxy
-				if route == "socks5h" || route == "compat" {
+				if route == "socks5h" {
 					peer = proxytest.SOCKS(t, server.Listener.Addr().String(), false)
 				} else {
 					peer = proxytest.HTTP(t, server.Listener.Addr().String(), route == "https")
@@ -89,17 +87,8 @@ func TestNativeResourceHTTPOverConnectPreservesEncodedBodyAndHead(t *testing.T) 
 				config.Network = policy
 				config.DialAddress = ""
 				config.Port = "9443"
-				if route == "compat" {
-					config.Transport = gatewaydial.Compat
-					u, _ := url.Parse(peer.URL)
-					config.DialAddress = u.Host
-				}
 				defer func() {
-					wantPort := "9443"
-					if route == "compat" {
-						wantPort = "443"
-					}
-					if len(peer.Requests()) != 1 || peer.Requests()[0].Address != endpoint+":"+wantPort {
+					if len(peer.Requests()) != 1 || peer.Requests()[0].Address != endpoint+":9443" {
 						t.Error("resource network configuration not forwarded")
 					}
 				}()

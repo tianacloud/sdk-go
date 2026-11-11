@@ -43,7 +43,7 @@ func NewResourceClient(c Config) (*ResourceClient, error) {
 	if c.Timeout < 0 {
 		return nil, errors.New("invalid resource timeout")
 	}
-	native, err := tiana.NewClient(tiana.Config{Endpoint: c.Endpoint, Token: token, RootCAs: c.RootCAs, DialAddress: c.DialAddress, Port: c.Port, ResponseTimeout: c.Timeout, Network: c.Network, Transport: c.Transport})
+	native, err := tiana.NewClient(tiana.Config{Endpoint: c.Endpoint, Token: token, RootCAs: c.RootCAs, DialAddress: c.DialAddress, Port: c.Port, ResponseTimeout: c.Timeout, Network: c.Network})
 	if err != nil {
 		return nil, err
 	}
