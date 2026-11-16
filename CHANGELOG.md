@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.0
+
+- Add optional registration-source metadata to CLI authentication transactions.
+  Callers provide `auth.Config.AcquisitionSource`; creation validates the source
+  without reading environment variables or changing existing transaction state.
+
 ## v1.2.0-rc.1
 
 - Add Function file clients for the resource owner's tenant root, an explicit

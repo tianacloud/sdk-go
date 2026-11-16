@@ -312,3 +312,33 @@ func TestLoginHonorsCancellation(t *testing.T) {
 		t.Fatalf("Login err=%v", err)
 	}
 }
+
+func TestTransactionAcquisitionSource(t *testing.T) {
+	t.Setenv("TIANA_FROM", "not-read-by-sdk")
+	for _, source := range []string{"", "workbuddy", "Doubao_9-", "bad value", strings.Repeat("a", 65)} {
+		t.Run(source, func(t *testing.T) {
+			called := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				var body transactionCreateRequest
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if body.Client.AcquisitionSource != source {
+					t.Errorf("source=%q", body.Client.AcquisitionSource)
+				}
+				io.WriteString(w, `{"transaction_id":"t","client_secret":"s","user_code":"ABCD-EFGH","verification_uri_complete":"https://example.test/a","expires_in":600}`)
+			}))
+			defer server.Close()
+			client, err := NewWithConfig(Config{Origin: server.URL, AcquisitionSource: source, Store: NewFileStore(filepath.Join(t.TempDir(), "credentials.json"), server.URL)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.CreateAuthTransaction(t.Context())
+			valid := source != "bad value" && len(source) <= 64
+			if valid != (err == nil) || called != valid {
+				t.Fatalf("called=%v err=%v", called, err)
+			}
+		})
+	}
+}
