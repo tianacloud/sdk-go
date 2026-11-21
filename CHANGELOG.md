@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.1
+
+- Preserve `412 / INSTANCE_DISABLED` on CONNECT and resource requests without retry.
+
 ## v1.2.0-rc.1
 
 - Add Function file clients for the resource owner's tenant root, an explicit

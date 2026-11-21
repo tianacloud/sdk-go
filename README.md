@@ -252,3 +252,9 @@ Endpoint, Instance, Group or Tenant scope covers the target. Token scope is
 independent of the instance engine and channel; anonymous resources do not grant
 anonymous publication. SDKs pass credentials unchanged without choosing a kind.
 Both reuse Gateway–Agent v4. Consumers must pin a published module revision containing these additions.
+
+### Disabled instances
+
+CONNECT to a disabled instance returns `*tiana.Error` with `Status == 412` and
+`Code == "INSTANCE_DISABLED"`. `Retryable()` is false; enable the instance before
+requesting another connection. Resource clients preserve the same typed error.
