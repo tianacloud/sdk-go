@@ -40,6 +40,8 @@ var (
 // path, if any, is preserved for local reverse proxies.
 type Config struct {
 	Origin string
+	// AcquisitionSource describes the first-registration channel of new transactions.
+	AcquisitionSource string
 	// HTTPClient supplies transport, timeout and cookie policy. The client is
 	// copied and CheckRedirect is overridden: MGR requests never follow redirects.
 	HTTPClient     *http.Client
@@ -60,18 +62,19 @@ type Config struct {
 }
 
 type Client struct {
-	origin         *url.URL
-	http           *http.Client
-	store          CredentialStore
-	output         io.Writer
-	pollInterval   time.Duration
-	now            func() time.Time
-	sleep          func(context.Context, time.Duration) error
-	hostname       string
-	platform       string
-	nonInteractive bool
-	credentialGate chan struct{}
-	onRequestID    func(string)
+	origin            *url.URL
+	http              *http.Client
+	store             CredentialStore
+	output            io.Writer
+	pollInterval      time.Duration
+	now               func() time.Time
+	sleep             func(context.Context, time.Duration) error
+	acquisitionSource string
+	hostname          string
+	platform          string
+	nonInteractive    bool
+	credentialGate    chan struct{}
+	onRequestID       func(string)
 }
 
 func New(origin string) (*Client, error) {
@@ -151,8 +154,9 @@ func NewWithConfig(config Config) (*Client, error) {
 	}
 	return &Client{
 		origin: parsed, http: config.HTTPClient, store: config.Store, output: config.Output,
-		onRequestID:  config.OnRequestID,
-		pollInterval: config.PollInterval, now: config.Now, sleep: config.Sleep,
+		onRequestID:       config.OnRequestID,
+		acquisitionSource: config.AcquisitionSource,
+		pollInterval:      config.PollInterval, now: config.Now, sleep: config.Sleep,
 		hostname: config.Hostname, platform: config.Platform, nonInteractive: config.NonInteractive, credentialGate: make(chan struct{}, 1),
 	}, nil
 }
@@ -232,10 +236,11 @@ type transactionCreateRequest struct {
 }
 
 type clientMetadata struct {
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Hostname string `json:"hostname"`
-	Platform string `json:"platform"`
+	AcquisitionSource string `json:"acquisition_source,omitempty"`
+	Type              string `json:"type"`
+	Name              string `json:"name"`
+	Hostname          string `json:"hostname"`
+	Platform          string `json:"platform"`
 }
 
 type BrowserAuthAction struct {
@@ -308,10 +313,17 @@ func (c *Client) CreateAuthTransaction(ctx context.Context) (AuthTransaction, er
 	if c == nil || c.origin == nil {
 		return AuthTransaction{}, errors.New("auth client is not configured")
 	}
+	if source := c.acquisitionSource; source != "" {
+		if len(source) > 64 || strings.IndexFunc(source, func(c rune) bool {
+			return !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-')
+		}) >= 0 {
+			return AuthTransaction{}, errors.New("registration source must contain 1..64 ASCII letters, digits, underscores or hyphens")
+		}
+	}
 	var response transactionResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/auth/transactions", transactionCreateRequest{
 		Purpose: "cli_login",
-		Client:  clientMetadata{Type: "cli", Name: "Tiana CLI", Hostname: c.hostname, Platform: c.platform},
+		Client:  clientMetadata{Type: "cli", Name: "Tiana CLI", Hostname: c.hostname, Platform: c.platform, AcquisitionSource: c.acquisitionSource},
 	}, "", &response); err != nil {
 		return AuthTransaction{}, err
 	}

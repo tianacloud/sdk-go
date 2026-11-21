@@ -9,6 +9,12 @@ HTTP/WebSocket, MySQL, PostgreSQL and Git. It is not a `database/sql` driver or 
 
 ## Account authentication
 
+`auth.Config.AcquisitionSource` supplies an optional first-registration channel
+when creating a CLI authentication transaction. The SDK preserves the supplied
+value and validates nonempty values at creation (1–64 ASCII letters, digits,
+underscores or hyphens). Resolve flags and environment in the caller; the SDK does
+not read `TIANA_FROM`. Existing transactions and refreshes keep their own context.
+
 The separate [`auth` package](docs/authentication.md) owns MGR login, refresh,
 logout, account credentials and saved InstanceToken lookup, shared with the CLI.
 It reads the existing `~/.config/tiana` files (or XDG_CONFIG_HOME) without a
