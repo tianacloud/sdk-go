@@ -26,8 +26,8 @@
 ## Unreleased
 
 - Add `wechatmini` for server-side WeChat code exchange, signed application
-  sessions and verified request-context identities, with a native mini-program
-  and Function demo. Application users are independent of platform accounts.
+  sessions and verified request-context identities. Application users are
+  independent of platform accounts.
 
 - Add an explicit `outbound.Policy` for HTTP/HTTPS CONNECT and SOCKS5 TCP proxies,
   with scheme-specific selection, `AllProxy` fallback and `NoProxy` matching.

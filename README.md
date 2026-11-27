@@ -62,8 +62,7 @@ access/refresh tokens are separate from the InstanceTokens used by CONNECT.
 ## Installation
 
 For native WeChat mini-program application users, see [`wechatmini`](wechatmini/README.md).
-It verifies WeChat login codes and signed application sessions inside a Function;
-the [demo](examples/wechat-mini-auth/README.md) includes native mini-program code.
+It verifies WeChat login codes and signed application sessions inside a Function.
 
 For file access inside a Tiana Function, see [Function files](docs/function-files.md).
 The `function` package constructs clients without user-supplied storage credentials.

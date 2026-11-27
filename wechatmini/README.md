@@ -45,17 +45,8 @@ mux.Handle("GET /me", authenticator.Middleware(http.HandlerFunc(
 )))
 ```
 
-The mini program sends two credentials when calling a Tiana Function:
-
-```javascript
-wx.request({
-  url: functionOrigin + '/me',
-  header: {
-    Authorization: 'Bearer ' + functionInstanceToken,
-    'X-App-Session': applicationSession.token,
-  },
-})
-```
+Requests carry the Function instance credential in `Authorization: Bearer <token>`
+and the application session in `X-App-Session`.
 
 Gateway validates the instance credential. `Middleware` verifies the application
 session's HMAC-SHA256 signature, AppID and expiration locally, then attaches that
@@ -69,6 +60,3 @@ credential remains valid until its signed expiration. Changing the signing key
 invalidates sessions issued with the old key when executions load the new key.
 The application remains responsible for business authorization, such as selecting
 orders by its verified user rather than accepting an arbitrary owner ID.
-
-The [complete Function and native mini-program example](../examples/wechat-mini-auth/README.md)
-includes login, a protected business route and executable identity checks.

@@ -29,7 +29,6 @@ MGR 请求不会自动跟随 HTTP 重定向，包括同源重定向和调用方�
 
 原生微信小程序的应用用户认证见 [`wechatmini`](wechatmini/README.md)：函数内验证微信
 登录 code、签发应用会话并从请求 Context 读取用户身份。
-[完整示例](examples/wechat-mini-auth/README.md) 包含后端函数和原生小程序演示页。
 
 本仓库发布版本后，可以执行：
 
